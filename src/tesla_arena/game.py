@@ -16,7 +16,7 @@ COIL_CAPACITY = 4
 KICK_COIL_STEP_SECONDS = 0.15
 LIGHTNING_VISUAL_SECONDS = 0.65
 POWERUP_DROP_CHANCE = 0.25
-BLOCK_POWERUPS = ("kick", "fire")
+BLOCK_POWERUPS = ("kick", "fire", "bomb")
 
 
 class GameError(ValueError):
@@ -177,6 +177,8 @@ class GameState:
             player.can_kick = True
         elif powerup == "fire":
             player.coil_range += 1
+        elif powerup == "bomb":
+            player.coil_capacity += 1
         return destination
 
     def _kick_coil(self, coil: TeslaCoil, dx: int, dy: int, now: float) -> None:
@@ -327,6 +329,7 @@ class GameState:
                     "alive": player.alive,
                     "can_kick": player.can_kick,
                     "coil_range": player.coil_range,
+                    "coil_capacity": player.coil_capacity,
                     "coil_slots": player.coil_capacity
                     - sum(
                         coil.owner_id == player.id for coil in self.coils.values()

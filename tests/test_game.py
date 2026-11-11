@@ -57,6 +57,38 @@ def test_player_can_place_four_coils_but_not_a_fifth() -> None:
         game.place_coil(player.id, 0)
 
 
+def test_bomb_up_drop_increases_capacity_and_allows_a_fifth_coil() -> None:
+    game = GameState.create()
+    game._random = Random(3)
+    owner = game.join_player("Owner")
+    owner.x, owner.y = 5, 5
+    game.soft_blocks.add((6, 5))
+    game.place_coil(owner.id, 0)
+    for _ in range(3):
+        game.move(owner.id, -1, 0)
+
+    game.tick(3)
+
+    assert game.powerups[(6, 5)] == "bomb"
+    assert game.snapshot()["powerups"] == [{"x": 6, "y": 5, "type": "bomb"}]
+    for _ in range(4):
+        game.move(owner.id, 1, 0)
+
+    assert owner.coil_capacity == 5
+    assert game.snapshot()["players"][0]["coil_capacity"] == 5
+    game.move(owner.id, 1, 0)
+    game.place_coil(owner.id, 4)
+    for coil_time in range(5, 9):
+        game.move(owner.id, 1, 0)
+        game.place_coil(owner.id, coil_time)
+
+    assert len(game.coils) == 5
+    assert game.snapshot()["players"][0]["coil_slots"] == 0
+    with pytest.raises(GameError, match="slots"):
+        game.move(owner.id, 1, 0)
+        game.place_coil(owner.id, 10)
+
+
 def test_coil_explodes_in_cross_and_eliminates_hit_players() -> None:
     game = GameState.create()
     owner = game.join_player("Owner")
