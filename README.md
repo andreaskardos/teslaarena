@@ -59,6 +59,9 @@ For the development roadmap and steps to resume work in a new session, see
   direction. Hard walls stop the attack; a soft block is destroyed and absorbs
   the rest of that ray.
 - A player hit by electricity is eliminated. The last player alive wins.
+- Destroyed soft blocks have a chance to drop a Kick power-up. A player with Kick
+  can walk into a Tesla coil to send it one tile at a time down a corridor; it
+  stops at obstacles and still explodes when its original fuse expires.
 - Create a public room to list it in the lobby. A private room is hidden from
   the list and requires its invitation code to join.
 

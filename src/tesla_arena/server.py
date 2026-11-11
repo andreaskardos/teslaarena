@@ -108,7 +108,9 @@ async def game_socket(websocket: WebSocket, room_id: str, player_id: str) -> Non
                 if action.type == "move":
                     if action.direction is None:
                         raise GameError("A movement direction is required.")
-                    room.game.move(player_id, *DIRECTIONS[action.direction])
+                    room.game.move(
+                        player_id, *DIRECTIONS[action.direction], now=time.monotonic()
+                    )
                 else:
                     room.game.place_coil(player_id, time.monotonic())
                 room.game.tick(time.monotonic())

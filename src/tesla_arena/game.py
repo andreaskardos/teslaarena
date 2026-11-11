@@ -13,6 +13,7 @@ DEFAULT_ARENA_SIZE = 35
 COIL_FUSE_SECONDS = 2.5
 COIL_RANGE = 2
 COIL_CAPACITY = 4
+KICK_COIL_STEP_SECONDS = 0.15
 LIGHTNING_VISUAL_SECONDS = 0.65
 KICK_POWERUP_DROP_CHANCE = 0.25
 
@@ -47,6 +48,8 @@ class TeslaCoil:
     owner_id: str
     position: Position
     explodes_at: float
+    kick_direction: Position | None = None
+    next_kick_step_at: float | None = None
 
 
 @dataclass
@@ -141,7 +144,9 @@ class GameState:
         self.players[player.id] = player
         return player
 
-    def move(self, player_id: str, dx: int, dy: int) -> Position:
+    def move(
+        self, player_id: str, dx: int, dy: int, now: float = 0
+    ) -> Position:
         player = self._get_living_player(player_id)
         if abs(dx) + abs(dy) != 1:
             raise GameError("Players can move one tile in one cardinal direction.")
@@ -153,7 +158,7 @@ class GameState:
         if coil is not None:
             if not player.can_kick:
                 raise GameError("That tile is blocked.")
-            self._kick_coil(coil, dx, dy)
+            self._kick_coil(coil, dx, dy, now)
         occupied_by_player = any(
             other.alive and other.position == destination
             for other in self.players.values()
@@ -171,15 +176,24 @@ class GameState:
             player.can_kick = True
         return destination
 
-    def _kick_coil(self, coil: TeslaCoil, dx: int, dy: int) -> None:
-        next_position = (coil.position[0] + dx, coil.position[1] + dy)
-        moved = False
-        while not self._coil_path_is_blocked(next_position, coil.id):
-            coil.position = next_position
-            moved = True
-            next_position = (coil.position[0] + dx, coil.position[1] + dy)
-        if not moved:
+    def _kick_coil(self, coil: TeslaCoil, dx: int, dy: int, now: float) -> None:
+        coil.kick_direction = (dx, dy)
+        if not self._advance_kicked_coil(coil):
+            coil.kick_direction = None
             raise GameError("The Tesla coil cannot be kicked in that direction.")
+        coil.next_kick_step_at = now + KICK_COIL_STEP_SECONDS
+
+    def _advance_kicked_coil(self, coil: TeslaCoil) -> bool:
+        if coil.kick_direction is None:
+            return False
+        dx, dy = coil.kick_direction
+        next_position = (coil.position[0] + dx, coil.position[1] + dy)
+        if self._coil_path_is_blocked(next_position, coil.id):
+            coil.kick_direction = None
+            coil.next_kick_step_at = None
+            return False
+        coil.position = next_position
+        return True
 
     def _coil_path_is_blocked(self, position: Position, coil_id: int) -> bool:
         return (
@@ -218,27 +232,53 @@ class GameState:
             for effect in self.lightning_effects
             if effect.expires_at > now
         ]
-        pending = deque(
-            coil.id for coil in self.coils.values() if coil.explodes_at <= now
-        )
         exploded: list[int] = []
-        while pending:
-            coil_id = pending.popleft()
+        while True:
+            due_events = []
+            for coil in self.coils.values():
+                if coil.explodes_at <= now:
+                    due_events.append((coil.explodes_at, 0, coil.id, "explode"))
+                if (
+                    coil.next_kick_step_at is not None
+                    and coil.next_kick_step_at <= now
+                ):
+                    due_events.append(
+                        (coil.next_kick_step_at, 1, coil.id, "move")
+                    )
+            if not due_events:
+                break
+
+            event_at, _, coil_id, event_type = min(due_events)
             coil = self.coils.get(coil_id)
             if coil is None:
                 continue
-            cells = self._lightning_cells(coil)
-            for player in self.players.values():
-                if player.alive and player.position in cells:
-                    player.lives -= 1
-            self.lightning_effects.append(
-                LightningEffect(coil.position, cells, now + LIGHTNING_VISUAL_SECONDS)
-            )
-            for chained in list(self.coils.values()):
-                if chained.id != coil.id and chained.position in cells:
-                    pending.append(chained.id)
-            del self.coils[coil.id]
-            exploded.append(coil.id)
+            if event_type == "move":
+                if self._advance_kicked_coil(coil):
+                    coil.next_kick_step_at += KICK_COIL_STEP_SECONDS
+                continue
+
+            pending = deque([coil_id])
+            while pending:
+                chained_id = pending.popleft()
+                chained_coil = self.coils.get(chained_id)
+                if chained_coil is None:
+                    continue
+                cells = self._lightning_cells(chained_coil)
+                for player in self.players.values():
+                    if player.alive and player.position in cells:
+                        player.lives -= 1
+                self.lightning_effects.append(
+                    LightningEffect(
+                        chained_coil.position,
+                        cells,
+                        event_at + LIGHTNING_VISUAL_SECONDS,
+                    )
+                )
+                for other in list(self.coils.values()):
+                    if other.id != chained_id and other.position in cells:
+                        pending.append(other.id)
+                del self.coils[chained_id]
+                exploded.append(chained_id)
         return exploded
 
     def _lightning_cells(self, coil: TeslaCoil) -> set[Position]:

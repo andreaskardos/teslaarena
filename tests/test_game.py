@@ -154,10 +154,37 @@ def test_kick_powerup_slides_coil_until_obstacle_and_player_takes_its_tile() -> 
     game.move(player.id, -1, 0)
     game.hard_walls.add((9, 5))
 
-    game.move(player.id, 1, 0)
+    game.move(player.id, 1, 0, now=0)
 
     assert player.position == (5, 5)
+    assert coil.position == (6, 5)
+    game.tick(0.15)
+    assert coil.position == (7, 5)
+    game.tick(0.30)
     assert coil.position == (8, 5)
+    game.tick(0.46)
+    assert coil.position == (8, 5)
+
+
+def test_kicked_coil_explodes_at_its_current_position_while_moving() -> None:
+    game = GameState.create()
+    kicker = game.join_player("Kicker")
+    target = game.join_player("Target")
+    kicker.x, kicker.y = 5, 5
+    kicker.can_kick = True
+    coil = game.place_coil(kicker.id, 0)
+    game.move(kicker.id, -1, 0)
+    target.x, target.y = 7, 7
+
+    game.move(kicker.id, 1, 0, now=2.2)
+    assert coil.position == (6, 5)
+    assert game.tick(2.49) == []
+    assert coil.position == (7, 5)
+    assert game.tick(2.5) == [coil.id]
+
+    lightning = game.snapshot()["lightning"][0]
+    assert lightning["center"] == [7, 5]
+    assert target.lives == 0
 
 
 def test_player_without_kick_cannot_move_through_a_coil() -> None:
@@ -184,7 +211,7 @@ def test_kick_cannot_push_coil_into_a_wall() -> None:
     game.hard_walls.add((6, 5))
 
     with pytest.raises(GameError, match="cannot be kicked"):
-        game.move(player.id, 1, 0)
+        game.move(player.id, 1, 0, now=0)
 
     assert player.position == (4, 5)
     assert coil.position == (5, 5)
@@ -200,9 +227,13 @@ def test_kick_stops_coil_before_another_player() -> None:
     game.move(kicker.id, -1, 0)
     target.x, target.y = 8, 5
 
-    game.move(kicker.id, 1, 0)
+    game.move(kicker.id, 1, 0, now=0)
 
     assert kicker.position == (5, 5)
+    assert coil.position == (6, 5)
+    game.tick(0.15)
+    assert coil.position == (7, 5)
+    game.tick(0.30)
     assert coil.position == (7, 5)
     assert target.position == (8, 5)
 
