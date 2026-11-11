@@ -289,7 +289,7 @@ def test_speed_up_drop_increases_server_validated_movement_speed() -> None:
     player.x, player.y = 5, 5
     game.move(player.id, 1, 0, now=10)
     with pytest.raises(GameError, match="too quickly"):
-        game.move(player.id, 1, 0, now=10.1)
+        game.move(player.id, 1, 0, now=10.05)
     game.move(player.id, 1, 0, now=10.12)
     assert player.position == (7, 5)
 
@@ -449,3 +449,37 @@ def _shortest_path_length(
                 visited.add(neighbor)
                 queue.append((neighbor, distance + 1))
     raise AssertionError(f"No route between spawns {start} and {end}.")
+
+
+def test_players_get_unique_colors_that_are_reused_and_kept_on_rematch() -> None:
+    game = GameState.create(player_limit=12)
+    players = [game.join_player(f"P{index}") for index in range(12)]
+    assert sorted(player.color for player in players) == list(range(12))
+
+    game.remove_player(players[3].id)
+    newcomer = game.join_player("New")
+    assert newcomer.color == players[3].color, "the freed color is reused"
+
+    fresh = game.rematch()
+    assert {pid: p.color for pid, p in fresh.players.items()} == {
+        pid: p.color for pid, p in game.players.items()
+    }
+    assert {p["id"]: p["color"] for p in fresh.snapshot()["players"]} == {
+        pid: p.color for pid, p in fresh.players.items()
+    }
+
+
+def test_slightly_early_moves_are_accepted_without_raising_speed() -> None:
+    game = GameState.create(width=11, height=11, player_limit=2, soft_block_count=0)
+    player = game.join_player("Runner")
+    player.x, player.y = (1, 1)
+
+    game.move(player.id, 1, 0, now=10.0)
+    # Arrives 30 ms early because of jitter: accepted, schedule unchanged.
+    game.move(player.id, 1, 0, now=10.17)
+    assert player.next_move_at == pytest.approx(10.4)
+    with pytest.raises(GameError, match="too quickly"):
+        game.move(player.id, 1, 0, now=10.3)  # 100 ms early is still refused
+    game.move(player.id, 1, 0, now=10.36)
+    assert player.position == (4, 1)
+    assert player.next_move_at == pytest.approx(10.6)

@@ -3,7 +3,16 @@ const gamePanel = document.querySelector("#game");
 const status = document.querySelector("#status");
 const canvas = document.querySelector("#arena");
 const context = canvas.getContext("2d");
-const colors = ["#54d8ff", "#ff738c", "#9cf276", "#ffc857", "#b89bff", "#ff9f68"];
+// One color per player slot (the server assigns each player a unique index).
+// Yellow is left out because it is the Tesla coil color.
+const playerColors = [
+  "#54d8ff", "#ff738c", "#9cf276", "#b89bff", "#ff9f68", "#f2f5ff",
+  "#4f7cff", "#ff5ad1", "#2fd6a8", "#d4e157", "#ff4040", "#8b5cf6",
+];
+
+function playerColor(player) {
+  return playerColors[player.color % playerColors.length];
+}
 let socket;
 let session;
 let gameState;
@@ -40,6 +49,13 @@ async function refreshRooms() {
 }
 
 const SESSION_KEY = "tesla-arena-session";
+const ROUTINE_ERRORS = new Set([
+  "Moving too quickly.",
+  "That tile is blocked.",
+  "The Tesla coil cannot be kicked in that direction.",
+  // A key press can race the state update that tells the client it died.
+  "Player is missing or has been eliminated.",
+]);
 const RECONNECT_DELAY_MS = 1000;
 let reconnectTimer;
 let previousPhase;
@@ -129,7 +145,8 @@ function returnToLobby(message) {
 
 function handleMessage(message) {
   if (message.type === "error") {
-    status.textContent = message.message;
+    // Bumping into walls or pressing keys fast is normal play, not an error.
+    if (!ROUTINE_ERRORS.has(message.message)) status.textContent = message.message;
     return;
   }
   if (message.type !== "state") return;
@@ -166,9 +183,11 @@ function handleMessage(message) {
         : `Väntar på spelare (${gameState.players.length}/${gameState.player_limit}). Du startar matchen.`
       : `Väntar på att värden startar (${gameState.players.length}/${gameState.player_limit}).`;
   } else if (phase === "finished") {
+    const outcome = gameState.winner_id ? "Matchen är avslutad." : "Oavgjort – ingen överlevde.";
+    if (!gameState.winner_id) status.textContent = outcome;
     gameStatus.textContent = creator
-      ? "Matchen är avslutad. Tryck på Spela igen för en ny runda."
-      : "Matchen är avslutad. Väntar på att värden startar en ny runda.";
+      ? `${outcome} Tryck på Spela igen för en ny runda.`
+      : `${outcome} Väntar på att värden startar en ny runda.`;
   } else if (session.role === "spectator") {
     gameStatus.textContent = "Du tittar på matchen som observatör.";
   } else {
@@ -321,19 +340,22 @@ function render() {
     context.arc(center.x, center.y, cellSize * 0.13, 0, Math.PI * 2);
     context.fill();
   }
-  gameState.players.forEach((player, index) => {
-    if (!player.alive) return;
+  for (const player of gameState.players) {
+    if (!player.alive) continue;
     const center = cellCenter(player.x, player.y, cellSize);
-    context.fillStyle = colors[index % colors.length];
+    context.fillStyle = playerColor(player);
     context.beginPath();
     context.arc(center.x, center.y, cellSize * 0.38, 0, Math.PI * 2);
     context.fill();
-    context.fillStyle = "#102033";
-    context.font = "bold 10px sans-serif";
-    context.textAlign = "center";
-    context.textBaseline = "middle";
-    context.fillText(player.name.slice(0, 2).toUpperCase(), center.x, center.y);
-  });
+    if (player.id === session?.member_id) {
+      // Mark the local player so they can find themselves without a label.
+      context.strokeStyle = "#ffffff";
+      context.lineWidth = 2;
+      context.beginPath();
+      context.arc(center.x, center.y, cellSize * 0.48, 0, Math.PI * 2);
+      context.stroke();
+    }
+  }
   drawLightning(gameState.lightning || [], cellSize);
   const playerList = document.querySelector("#players");
   playerList.replaceChildren();
@@ -348,8 +370,19 @@ function render() {
       ...(player.has_remote ? ["Remote Control"] : []),
     ].join(" · ");
     const playerStatus = player.left ? "lämnade" : player.alive ? abilities : "ute";
-    item.textContent = `${player.bot_skill ? "🤖 " : ""}${player.name} · ${playerStatus}`;
-    if (!player.alive) item.style.color = "#78869e";
+    const swatch = document.createElement("span");
+    swatch.className = "player-swatch";
+    swatch.style.background = playerColor(player);
+    const isYou = player.id === session?.member_id;
+    const info = document.createElement("div");
+    info.className = "player-info";
+    const name = document.createElement("strong");
+    name.textContent = `${player.bot_skill ? "🤖 " : ""}${player.name}${isYou ? " (du)" : ""}`;
+    const stats = document.createElement("small");
+    stats.textContent = playerStatus;
+    info.append(name, stats);
+    item.append(swatch, info);
+    if (!player.alive) item.classList.add("out");
     if (player.bot_skill && canManageBots()) {
       const remove = document.createElement("button");
       remove.className = "secondary remove-bot";

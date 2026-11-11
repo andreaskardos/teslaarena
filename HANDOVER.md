@@ -12,7 +12,7 @@ Updated: 2026-11-11
 - Dropped players have 15 seconds to reconnect; the creator can start a rematch when a match ends; empty rooms are deleted.
 - Remote Control allows its owner to trigger their coils with **R** or the in-game button.
 - Requests are rate limited per IP (5 rooms and 30 joins per minute) and per connection (20 actions per second); the server holds at most 200 rooms and 50 spectators per room.
-- Last test run: **75 passed**. `node --check web\game.js` and `git diff --check` passed. There is one existing Starlette/AnyIO deprecation warning.
+- Last test run: **77 passed**. `node --check web\game.js` and `git diff --check` passed. There is one existing Starlette/AnyIO deprecation warning.
 
 ## Resume after restarting the PC
 
@@ -77,7 +77,10 @@ movement and Tesla-coil combat, Remote Control, the winner display, rematches,
 and reloading the page or closing a tab mid-match. Record any issues as
 regression tests before changing game behavior.
 
-A scripted two-browser run in Edge already covers the lobby, adding and
+A scripted Playwright playtest in Edge (2026-11-11) passed: private rooms and
+invite codes, a full 12-player room with a rejected 13th player, a late
+spectator, and a 12-player match. Move latency on localhost was about 35-50 ms
+median with no dropped moves. A two-browser run in Edge also covers the lobby, adding and
 removing bots, joining by code, reloading, closing a tab mid-match, rematch
 and leaving. Still to check by hand: private rooms, a full 12-player room, and
 how movement and the bots feel.

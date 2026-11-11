@@ -88,7 +88,8 @@ For the development roadmap and steps to resume work in a new session, see
 - Create a public room to list it in the lobby. A private room is hidden from
   the list and requires its invitation code to join.
 
-Movement uses the arrow keys or WASD; Space places a coil, and R triggers
+Each player gets their own color, shown in the player list; your own
+character has a white ring. Movement uses the arrow keys or WASD; Space places a coil, and R triggers
 Remote Control coils. Room state is held in memory and is lost when the server
 restarts.
 

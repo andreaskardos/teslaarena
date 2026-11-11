@@ -33,7 +33,15 @@ button { padding: 0 16px; border: 0; color: #06121d; font-weight: 800; backgroun
 button:hover { background: #8be6ff; }
 button.secondary { color: #d7e1f4; background: #2b3a56; }
 #status { min-height: 1.5em; }
-#rooms, #players { padding-left: 20px; color: #c9d5ea; }
+#rooms { padding-left: 20px; color: #c9d5ea; }
+#players { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; padding: 0; color: #c9d5ea; list-style: none; }
+#players li { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 6px 10px; background: #141d2e; border-radius: 10px; }
+.player-info { display: flex; flex-direction: column; min-width: 0; }
+.player-info strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.player-info small { color: #8f9db5; }
+#players li.out { color: #78869e; }
+#players li.out .player-swatch { opacity: 0.35; }
+.player-swatch { flex: none; width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 0 2px #0f1626; }
 .hidden { display: none !important; }
 .game-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .game-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }

@@ -20,6 +20,9 @@ MOVE_INTERVAL_SECONDS = 0.2
 SPEED_UP_MOVE_INTERVAL_SECONDS = 0.12
 KICK_COIL_STEP_SECONDS = 0.15
 LIGHTNING_VISUAL_SECONDS = 0.65
+# Network jitter can deliver a correctly paced move slightly early; accept it
+# but keep the schedule, so the average speed never increases.
+MOVE_EARLY_TOLERANCE_SECONDS = 0.05
 POWERUP_DROP_CHANCE = 0.25
 BLOCK_POWERUPS = ("kick", "fire", "bomb", "speed", "remote")
 
@@ -43,6 +46,8 @@ class Player:
     next_move_at: float = 0
     bot_skill: str | None = None
     left: bool = False
+    color: int = 0
+    """Index into the client's player palette; unique within a match."""
 
     @property
     def alive(self) -> bool:
@@ -219,14 +224,19 @@ class GameState:
         self._next_player_id += 1
         return player
 
-    def _spawn_player(self, player_id: str, name: str) -> Player:
+    def _spawn_player(
+        self, player_id: str, name: str, color: int | None = None
+    ) -> Player:
         occupied = {player.position for player in self.players.values()}
         spawn = next(
             (point for point in self.spawn_points() if point not in occupied), None
         )
         if spawn is None:
             raise GameError("No free spawn point is available.")
-        player = Player(id=player_id, name=name, x=spawn[0], y=spawn[1])
+        if color is None:
+            used = {player.color for player in self.players.values()}
+            color = next(index for index in range(MAX_PLAYERS) if index not in used)
+        player = Player(id=player_id, name=name, x=spawn[0], y=spawn[1], color=color)
         self.players[player.id] = player
         return player
 
@@ -239,7 +249,9 @@ class GameState:
         for player in self.players.values():
             if player.left:
                 continue
-            fresh._spawn_player(player.id, player.name).bot_skill = player.bot_skill
+            fresh._spawn_player(
+                player.id, player.name, player.color
+            ).bot_skill = player.bot_skill
         fresh._next_player_id = self._next_player_id
         return fresh
 
@@ -259,7 +271,7 @@ class GameState:
         player = self._get_living_player(player_id)
         if abs(dx) + abs(dy) != 1:
             raise GameError("Players can move one tile in one cardinal direction.")
-        if now is not None and now < player.next_move_at:
+        if now is not None and now < player.next_move_at - MOVE_EARLY_TOLERANCE_SECONDS:
             raise GameError("Moving too quickly.")
         destination = (player.x + dx, player.y + dy)
         coil = next(
@@ -294,7 +306,7 @@ class GameState:
         elif powerup == "remote":
             player.has_remote = True
         if now is not None:
-            player.next_move_at = now + player.move_interval
+            player.next_move_at = max(now, player.next_move_at) + player.move_interval
         return destination
 
     def _kick_coil(self, coil: TeslaCoil, dx: int, dy: int, now: float) -> None:
@@ -480,6 +492,7 @@ class GameState:
                     "has_remote": player.has_remote,
                     "bot_skill": player.bot_skill,
                     "left": player.left,
+                    "color": player.color,
                     "coil_slots": player.coil_capacity
                     - sum(
                         coil.owner_id == player.id for coil in self.coils.values()
