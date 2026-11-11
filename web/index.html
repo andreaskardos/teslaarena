@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tesla Arena</title>
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">MULTIPLAYER ARENA</p>
+        <h1>Tesla Arena</h1>
+        <p>Upp till 12 spelare. Placera ut coils, överlev blixtarna och bli sist kvar.</p>
+      </header>
+      <p id="status" role="status">Ange ett namn och skapa eller gå med i ett rum.</p>
+      <section id="lobby" class="panel">
+        <form id="create-form">
+          <label><input id="private-room" type="checkbox"> Privat rum</label>
+          <button type="submit">Skapa spelrum</button>
+        </form>
+        <form id="join-form">
+          <input id="room-id" placeholder="Rumskod" maxlength="6" required>
+          <input id="invite-code" placeholder="Inbjudningskod (privat rum)">
+          <input id="player-name" placeholder="Ditt namn" maxlength="20" required>
+          <button type="submit">Gå med</button>
+        </form>
+        <h2>Öppna rum</h2>
+        <ul id="rooms"></ul>
+      </section>
+      <section id="game" class="panel hidden">
+        <div class="game-heading">
+          <div><h2 id="room-title"></h2><p id="room-meta"></p></div>
+          <button id="leave-button" class="secondary">Lämna rum</button>
+        </div>
+        <canvas id="arena" aria-label="Spelplan"></canvas>
+        <p class="controls">Rörelse: piltangenter eller WASD · Placera Tesla coil: mellanslag</p>
+        <ul id="players"></ul>
+      </section>
+    </main>
+    <script src="/game.js" defer></script>
+  </body>
+</html>

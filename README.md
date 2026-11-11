@@ -1,0 +1,66 @@
+# Tesla Arena
+
+Tesla Arena is a server-authoritative, browser-based multiplayer arena game. Its
+first playable version supports up to 12 players in public or invite-only rooms.
+
+## Set up on Windows
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+If PowerShell blocks activation, allow it for the current terminal only, then
+activate the environment:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+```
+
+Activation is needed again in each new terminal. After a PC restart, open a
+PowerShell terminal in the project folder and run:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+If `.venv` is missing, recreate it and install dependencies with the setup
+commands above. `.venv` is local and is not committed; `requirements.txt` lists
+the packages needed to restore it.
+
+## Run locally
+
+With `.venv` activated:
+
+```powershell
+python -m uvicorn tesla_arena.server:app --app-dir src --reload
+```
+
+Open <http://127.0.0.1:8000>. Run the test suite with:
+
+```powershell
+python -m pytest
+```
+
+For the development roadmap and steps to resume work in a new session, see
+[ROADMAP.md](ROADMAP.md).
+
+## Battle rules
+
+- The arena is 35 by 35 tiles. Twelve spawn points are distributed around its
+  clear perimeter; neighboring spawn points are at least 10 Manhattan tiles
+  apart. Interior pillars and destructible blocks add obstacles without
+  blocking the perimeter route.
+- Players can place up to four Tesla coils at once. Coils discharge after
+  2.5 seconds, sending a cross-shaped electric attack up to two tiles in each
+  direction. Hard walls stop the attack; a soft block is destroyed and absorbs
+  the rest of that ray.
+- A player hit by electricity is eliminated. The last player alive wins.
+- Create a public room to list it in the lobby. A private room is hidden from
+  the list and requires its invitation code to join.
+
+Movement uses the arrow keys or WASD; Space places a coil. Room state is held
+in memory and is lost when the server restarts.
