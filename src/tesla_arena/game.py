@@ -12,6 +12,7 @@ DEFAULT_ARENA_SIZE = 35
 COIL_FUSE_SECONDS = 2.5
 COIL_RANGE = 2
 COIL_CAPACITY = 4
+LIGHTNING_VISUAL_SECONDS = 0.65
 
 
 class GameError(ValueError):
@@ -46,6 +47,13 @@ class TeslaCoil:
 
 
 @dataclass
+class LightningEffect:
+    center: Position
+    cells: set[Position]
+    expires_at: float
+
+
+@dataclass
 class GameState:
     width: int
     height: int
@@ -54,6 +62,7 @@ class GameState:
     soft_blocks: set[Position] = field(default_factory=set)
     players: dict[str, Player] = field(default_factory=dict)
     coils: dict[int, TeslaCoil] = field(default_factory=dict)
+    lightning_effects: list[LightningEffect] = field(default_factory=list)
     _next_player_id: int = 1
     _next_coil_id: int = 1
 
@@ -168,6 +177,11 @@ class GameState:
         return coil
 
     def tick(self, now: float) -> list[int]:
+        self.lightning_effects = [
+            effect
+            for effect in self.lightning_effects
+            if effect.expires_at > now
+        ]
         pending = deque(
             coil.id for coil in self.coils.values() if coil.explodes_at <= now
         )
@@ -181,6 +195,9 @@ class GameState:
             for player in self.players.values():
                 if player.alive and player.position in cells:
                     player.lives -= 1
+            self.lightning_effects.append(
+                LightningEffect(coil.position, cells, now + LIGHTNING_VISUAL_SECONDS)
+            )
             for chained in list(self.coils.values()):
                 if chained.id != coil.id and chained.position in cells:
                     pending.append(chained.id)
@@ -230,6 +247,13 @@ class GameState:
             "coils": [
                 {"id": coil.id, "x": coil.position[0], "y": coil.position[1]}
                 for coil in self.coils.values()
+            ],
+            "lightning": [
+                {
+                    "center": list(effect.center),
+                    "cells": [list(position) for position in sorted(effect.cells)],
+                }
+                for effect in self.lightning_effects
             ],
             "winner_id": winner.id if winner else None,
         }

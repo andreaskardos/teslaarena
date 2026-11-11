@@ -74,6 +74,10 @@ def test_coil_explodes_in_cross_and_eliminates_hit_players() -> None:
     assert target.lives == 0
     assert horizontal_target.lives == 0
     assert game.snapshot()["winner_id"] == owner.id
+    assert len(game.snapshot()["lightning"]) == 1
+    assert [5, 5] in game.snapshot()["lightning"][0]["cells"]
+    assert game.tick(13.16) == []
+    assert game.snapshot()["lightning"] == []
 
 
 def test_player_is_eliminated_by_their_own_coil_if_they_do_not_escape() -> None:
@@ -100,6 +104,7 @@ def test_hard_wall_stops_lightning_and_survives() -> None:
 
     assert behind_wall.lives == 1
     assert (6, 5) in game.hard_walls
+    assert [6, 5] not in game.snapshot()["lightning"][0]["cells"]
 
 
 def test_soft_block_is_destroyed_and_stops_lightning() -> None:

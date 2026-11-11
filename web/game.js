@@ -153,6 +153,7 @@ function render() {
     context.textBaseline = "middle";
     context.fillText(player.name.slice(0, 2).toUpperCase(), center.x, center.y);
   });
+  drawLightning(gameState.lightning || [], cellSize);
   const playerList = document.querySelector("#players");
   playerList.replaceChildren();
   for (const player of gameState.players) {
@@ -164,6 +165,70 @@ function render() {
   if (gameState.winner_id) {
     const winner = gameState.players.find((player) => player.id === gameState.winner_id);
     status.textContent = `${winner.name} vann matchen!`;
+  }
+}
+
+function drawLightning(effects, size) {
+  for (const effect of effects) {
+    const cells = effect.cells.map(([x, y]) => ({ x, y }));
+    const center = { x: effect.center[0], y: effect.center[1] };
+
+    context.save();
+    context.globalCompositeOperation = "lighter";
+    for (const cell of cells) {
+      const point = cellCenter(cell.x, cell.y, size);
+      const glow = context.createRadialGradient(point.x, point.y, 1, point.x, point.y, size * 0.72);
+      glow.addColorStop(0, "rgba(255,255,255,0.98)");
+      glow.addColorStop(0.25, "rgba(76,225,255,0.92)");
+      glow.addColorStop(1, "rgba(24,118,255,0)");
+      context.fillStyle = glow;
+      context.fillRect(point.x - size, point.y - size, size * 2, size * 2);
+    }
+
+    const frame = Math.floor(performance.now() / 75);
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const end = cells.reduce((farthest, cell) => {
+        if ((cell.x - center.x) * dx + (cell.y - center.y) * dy
+          > (farthest.x - center.x) * dx + (farthest.y - center.y) * dy) {
+          return cell;
+        }
+        return farthest;
+      }, center);
+      if (end.x === center.x && end.y === center.y) continue;
+
+      const startPoint = cellCenter(center.x, center.y, size);
+      const endPoint = cellCenter(end.x, end.y, size);
+      const length = Math.abs(end.x - center.x) + Math.abs(end.y - center.y);
+      const perpendicular = dx === 0 ? 1 : 0;
+      const points = [startPoint];
+      for (let step = 1; step < length * 2; step += 1) {
+        const progress = step / (length * 2);
+        const jitter = Math.sin(frame * 2.1 + step * 12.7 + center.x * 3 + center.y) * size * 0.15;
+        points.push({
+          x: startPoint.x + (endPoint.x - startPoint.x) * progress + (perpendicular ? jitter : 0),
+          y: startPoint.y + (endPoint.y - startPoint.y) * progress + (perpendicular ? 0 : jitter),
+        });
+      }
+      points.push(endPoint);
+
+      for (const [color, width, blur] of [
+        ["#138bff", size * 0.58, size * 0.75],
+        ["#29cfff", size * 0.34, size * 0.42],
+        ["#f3ffff", size * 0.13, size * 0.12],
+      ]) {
+        context.beginPath();
+        context.moveTo(points[0].x, points[0].y);
+        for (const point of points.slice(1)) context.lineTo(point.x, point.y);
+        context.strokeStyle = color;
+        context.lineWidth = width;
+        context.lineCap = "round";
+        context.lineJoin = "round";
+        context.shadowColor = "#48dfff";
+        context.shadowBlur = blur;
+        context.stroke();
+      }
+    }
+    context.restore();
   }
 }
 
