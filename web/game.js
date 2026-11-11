@@ -7,6 +7,7 @@ const colors = ["#54d8ff", "#ff738c", "#9cf276", "#ffc857", "#b89bff", "#ff9f68"
 let socket;
 let session;
 let gameState;
+let lastMoveSentAt = 0;
 
 async function request(path, options = {}) {
   const response = await fetch(path, {
@@ -116,6 +117,11 @@ window.addEventListener("keydown", (event) => {
   const direction = directions[event.key];
   if (direction) {
     event.preventDefault();
+    const player = gameState?.players.find((item) => item.id === session.player_id);
+    const moveInterval = (player?.move_interval ?? 0.2) * 1000;
+    const now = performance.now();
+    if (now - lastMoveSentAt < moveInterval) return;
+    lastMoveSentAt = now;
     socket.send(JSON.stringify({ type: "move", direction }));
   } else if (event.code === "Space") {
     event.preventDefault();
@@ -167,6 +173,7 @@ function render() {
       `${player.coil_slots}/${player.coil_capacity} coils`,
       `Räckvidd ${player.coil_range}`,
       ...(player.can_kick ? ["Kick"] : []),
+      ...(player.has_speed_up ? ["Speed Up"] : []),
     ].join(" · ");
     item.textContent = `${player.name} · ${player.alive ? abilities : "ute"}`;
     if (!player.alive) item.style.color = "#78869e";
@@ -180,7 +187,7 @@ function render() {
 
 function drawPowerups(powerups, size) {
   for (const powerup of powerups) {
-    if (!["kick", "fire", "bomb"].includes(powerup.type)) continue;
+    if (!["kick", "fire", "bomb", "speed"].includes(powerup.type)) continue;
     const center = cellCenter(powerup.x, powerup.y, size);
     context.save();
     context.translate(center.x, center.y);
@@ -189,6 +196,7 @@ function drawPowerups(powerups, size) {
       kick: { foreground: "#8cff9b", background: "#153f35", icon: "K" },
       fire: { foreground: "#ffd166", background: "#49351b", icon: "F" },
       bomb: { foreground: "#ff9ac1", background: "#492437", icon: "B" },
+      speed: { foreground: "#79d7ff", background: "#173848", icon: "S" },
     };
     const { foreground, background, icon } = colors[powerup.type];
     context.fillStyle = background;

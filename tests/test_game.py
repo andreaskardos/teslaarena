@@ -70,26 +70,20 @@ def test_movement_cannot_leave_arena_or_cross_obstacles() -> None:
     assert player.position == game.spawn_points()[0]
 
 
-def test_player_can_place_four_coils_but_not_a_fifth() -> None:
+def test_player_starts_with_one_coil_slot() -> None:
     game = GameState.create()
     player = game.join_player("Coils")
+    assert player.coil_capacity == 1
     game.place_coil(player.id, 0)
 
     game.move(player.id, 1, 0)
-    game.place_coil(player.id, 0)
-    game.move(player.id, 1, 0)
-    game.place_coil(player.id, 0)
-    game.move(player.id, 1, 0)
-    game.place_coil(player.id, 0)
-    game.move(player.id, 1, 0)
-
     with pytest.raises(GameError, match="slots"):
         game.place_coil(player.id, 0)
 
 
-def test_bomb_up_drop_increases_capacity_and_allows_a_fifth_coil() -> None:
+def test_bomb_up_drop_increases_capacity_and_allows_a_second_coil() -> None:
     game = GameState.create()
-    game._random = Random(3)
+    game._random = Random(79)
     owner = game.join_player("Owner")
     owner.x, owner.y = 5, 5
     game.soft_blocks.add((6, 5))
@@ -104,18 +98,15 @@ def test_bomb_up_drop_increases_capacity_and_allows_a_fifth_coil() -> None:
     for _ in range(4):
         game.move(owner.id, 1, 0)
 
-    assert owner.coil_capacity == 5
-    assert game.snapshot()["players"][0]["coil_capacity"] == 5
-    game.move(owner.id, 1, 0)
+    assert owner.coil_capacity == 2
+    assert game.snapshot()["players"][0]["coil_capacity"] == 2
     game.place_coil(owner.id, 4)
-    for coil_time in range(5, 9):
-        game.move(owner.id, 1, 0)
-        game.place_coil(owner.id, coil_time)
+    game.move(owner.id, 1, 0)
+    game.place_coil(owner.id, 5)
 
-    assert len(game.coils) == 5
+    assert len(game.coils) == 2
     assert game.snapshot()["players"][0]["coil_slots"] == 0
     with pytest.raises(GameError, match="slots"):
-        game.move(owner.id, 1, 0)
         game.place_coil(owner.id, 10)
 
 
@@ -209,7 +200,7 @@ def test_destroyed_soft_block_can_drop_kick_powerup_and_player_collects_it() -> 
 
 def test_fire_powerup_increases_range_and_extends_lightning() -> None:
     game = GameState.create()
-    game._random = Random(8)
+    game._random = Random(3)
     owner = game.join_player("Owner")
     target = game.join_player("Target")
     owner.x, owner.y = 5, 5
@@ -233,6 +224,35 @@ def test_fire_powerup_increases_range_and_extends_lightning() -> None:
 
     assert target.lives == 0
     assert [8, 5] in game.snapshot()["lightning"][0]["cells"]
+
+
+def test_speed_up_drop_increases_server_validated_movement_speed() -> None:
+    game = GameState.create()
+    game._random = Random(8)
+    player = game.join_player("Runner")
+    player.x, player.y = 5, 5
+    game.soft_blocks.add((6, 5))
+    game.place_coil(player.id, 0)
+    for _ in range(3):
+        game.move(player.id, -1, 0)
+
+    game.tick(3)
+
+    assert game.powerups[(6, 5)] == "speed"
+    for _ in range(4):
+        game.move(player.id, 1, 0)
+
+    assert player.has_speed_up
+    assert player.move_interval == pytest.approx(0.12)
+    assert game.snapshot()["players"][0]["has_speed_up"] is True
+    assert game.snapshot()["players"][0]["move_interval"] == pytest.approx(0.12)
+
+    player.x, player.y = 5, 5
+    game.move(player.id, 1, 0, now=10)
+    with pytest.raises(GameError, match="too quickly"):
+        game.move(player.id, 1, 0, now=10.1)
+    game.move(player.id, 1, 0, now=10.12)
+    assert player.position == (7, 5)
 
 
 def test_kick_powerup_slides_coil_until_obstacle_and_player_takes_its_tile() -> None:

@@ -56,7 +56,8 @@ For the development roadmap and steps to resume work in a new session, see
   blocking the perimeter route.
 - When creating a room, choose between 0 and 200 destructible blocks. The
   default remains 16. Blocks are distributed away from player spawn points.
-- Players can place up to four Tesla coils at once. Coils discharge after
+- Players start with one Tesla coil slot. Bomb Up power-ups increase the number
+  of coils they can place at once. Coils discharge after
   2.5 seconds, sending a cross-shaped electric attack up to two tiles in each
   direction. Hard walls stop the attack; a soft block is destroyed and absorbs
   the rest of that ray.
@@ -68,6 +69,8 @@ For the development roadmap and steps to resume work in a new session, see
   player's Tesla coil lightning range by one tile for the current match.
 - Bomb Up can also drop from destroyed blocks and permanently adds one
   simultaneous Tesla coil slot for that player during the match.
+- Speed Up can drop from destroyed blocks and lets its collector move one tile
+  every 0.12 seconds instead of the usual 0.2 seconds.
 - Create a public room to list it in the lobby. A private room is hidden from
   the list and requires its invitation code to join.
 

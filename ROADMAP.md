@@ -9,6 +9,8 @@
 - [x] Kick power-up drops, collection, and coil sliding.
 - [x] Fire Up power-up drops, collection, and increased lightning range.
 - [x] Bomb Up power-up drops, collection, and increased coil capacity.
+- [x] Players start with one coil slot; Bomb Up adds another slot.
+- [x] Speed Up power-up drops, collection, and faster movement.
 - [x] Choose the number of destructible blocks when creating a room.
 - [x] Browser lobby and arena with keyboard controls.
 - [x] Automated game, room, HTTP, and WebSocket tests.
@@ -37,7 +39,7 @@
 
 - Improve movement timing and visuals for lightning and block destruction.
 - Add sound, mobile-friendly controls, and clearer player/team status.
-- Add speed and remote-trigger power-ups.
+- Add remote-trigger power-up.
 - Tune arena size, spawn distance, obstacles, fuse time, and attack range through
   playtesting.
 

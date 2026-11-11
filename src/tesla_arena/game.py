@@ -14,11 +14,13 @@ DEFAULT_SOFT_BLOCK_COUNT = 16
 MAX_SOFT_BLOCK_COUNT = 200
 COIL_FUSE_SECONDS = 2.5
 COIL_RANGE = 2
-COIL_CAPACITY = 4
+COIL_CAPACITY = 1
+MOVE_INTERVAL_SECONDS = 0.2
+SPEED_UP_MOVE_INTERVAL_SECONDS = 0.12
 KICK_COIL_STEP_SECONDS = 0.15
 LIGHTNING_VISUAL_SECONDS = 0.65
 POWERUP_DROP_CHANCE = 0.25
-BLOCK_POWERUPS = ("kick", "fire", "bomb")
+BLOCK_POWERUPS = ("kick", "fire", "bomb", "speed")
 
 
 class GameError(ValueError):
@@ -35,6 +37,8 @@ class Player:
     coil_capacity: int = COIL_CAPACITY
     coil_range: int = COIL_RANGE
     can_kick: bool = False
+    has_speed_up: bool = False
+    next_move_at: float = 0
 
     @property
     def alive(self) -> bool:
@@ -43,6 +47,14 @@ class Player:
     @property
     def position(self) -> Position:
         return self.x, self.y
+
+    @property
+    def move_interval(self) -> float:
+        return (
+            SPEED_UP_MOVE_INTERVAL_SECONDS
+            if self.has_speed_up
+            else MOVE_INTERVAL_SECONDS
+        )
 
 
 @dataclass
@@ -182,11 +194,13 @@ class GameState:
         return player
 
     def move(
-        self, player_id: str, dx: int, dy: int, now: float = 0
+        self, player_id: str, dx: int, dy: int, now: float | None = None
     ) -> Position:
         player = self._get_living_player(player_id)
         if abs(dx) + abs(dy) != 1:
             raise GameError("Players can move one tile in one cardinal direction.")
+        if now is not None and now < player.next_move_at:
+            raise GameError("Moving too quickly.")
         destination = (player.x + dx, player.y + dy)
         coil = next(
             (coil for coil in self.coils.values() if coil.position == destination),
@@ -195,7 +209,7 @@ class GameState:
         if coil is not None:
             if not player.can_kick:
                 raise GameError("That tile is blocked.")
-            self._kick_coil(coil, dx, dy, now)
+            self._kick_coil(coil, dx, dy, now if now is not None else 0)
         occupied_by_player = any(
             other.alive and other.position == destination
             for other in self.players.values()
@@ -215,6 +229,10 @@ class GameState:
             player.coil_range += 1
         elif powerup == "bomb":
             player.coil_capacity += 1
+        elif powerup == "speed":
+            player.has_speed_up = True
+        if now is not None:
+            player.next_move_at = now + player.move_interval
         return destination
 
     def _kick_coil(self, coil: TeslaCoil, dx: int, dy: int, now: float) -> None:
@@ -368,6 +386,8 @@ class GameState:
                     "can_kick": player.can_kick,
                     "coil_range": player.coil_range,
                     "coil_capacity": player.coil_capacity,
+                    "move_interval": player.move_interval,
+                    "has_speed_up": player.has_speed_up,
                     "coil_slots": player.coil_capacity
                     - sum(
                         coil.owner_id == player.id for coil in self.coils.values()

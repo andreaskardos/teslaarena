@@ -73,6 +73,7 @@ def test_websocket_sends_state_and_accepts_game_actions() -> None:
         initial = websocket.receive_json()
         assert initial["type"] == "state"
         assert initial["state"]["player_limit"] == 12
+        assert initial["state"]["players"][0]["coil_capacity"] == 1
         websocket.send_json({"type": "place_coil"})
         updated = websocket.receive_json()
         assert updated["type"] == "state"
