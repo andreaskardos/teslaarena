@@ -1,5 +1,6 @@
 from collections import deque
 from itertools import combinations
+from random import Random
 
 import pytest
 
@@ -120,6 +121,90 @@ def test_soft_block_is_destroyed_and_stops_lightning() -> None:
 
     assert (6, 5) not in game.soft_blocks
     assert behind_block.lives == 1
+
+
+def test_destroyed_soft_block_can_drop_kick_powerup_and_player_collects_it() -> None:
+    game = GameState.create()
+    game._random = Random(1)
+    owner = game.join_player("Owner")
+    owner.x, owner.y = 5, 5
+    game.soft_blocks.add((6, 5))
+    game.place_coil(owner.id, 0)
+    for _ in range(3):
+        game.move(owner.id, -1, 0)
+
+    game.tick(3)
+
+    assert game.powerups[(6, 5)] == "kick"
+    assert game.snapshot()["powerups"] == [{"x": 6, "y": 5, "type": "kick"}]
+    assert not owner.can_kick
+    for _ in range(3):
+        game.move(owner.id, 1, 0)
+    game.move(owner.id, 1, 0)
+    assert owner.can_kick
+    assert game.powerups == {}
+
+
+def test_kick_powerup_slides_coil_until_obstacle_and_player_takes_its_tile() -> None:
+    game = GameState.create()
+    player = game.join_player("Kicker")
+    player.x, player.y = 5, 5
+    player.can_kick = True
+    coil = game.place_coil(player.id, 20)
+    game.move(player.id, -1, 0)
+    game.hard_walls.add((9, 5))
+
+    game.move(player.id, 1, 0)
+
+    assert player.position == (5, 5)
+    assert coil.position == (8, 5)
+
+
+def test_player_without_kick_cannot_move_through_a_coil() -> None:
+    game = GameState.create()
+    player = game.join_player("Player")
+    player.x, player.y = 5, 5
+    coil = game.place_coil(player.id, 20)
+    game.move(player.id, -1, 0)
+
+    with pytest.raises(GameError, match="blocked"):
+        game.move(player.id, 1, 0)
+
+    assert player.position == (4, 5)
+    assert coil.position == (5, 5)
+
+
+def test_kick_cannot_push_coil_into_a_wall() -> None:
+    game = GameState.create()
+    player = game.join_player("Kicker")
+    player.x, player.y = 5, 5
+    player.can_kick = True
+    coil = game.place_coil(player.id, 20)
+    game.move(player.id, -1, 0)
+    game.hard_walls.add((6, 5))
+
+    with pytest.raises(GameError, match="cannot be kicked"):
+        game.move(player.id, 1, 0)
+
+    assert player.position == (4, 5)
+    assert coil.position == (5, 5)
+
+
+def test_kick_stops_coil_before_another_player() -> None:
+    game = GameState.create()
+    kicker = game.join_player("Kicker")
+    target = game.join_player("Target")
+    kicker.x, kicker.y = 5, 5
+    kicker.can_kick = True
+    coil = game.place_coil(kicker.id, 20)
+    game.move(kicker.id, -1, 0)
+    target.x, target.y = 8, 5
+
+    game.move(kicker.id, 1, 0)
+
+    assert kicker.position == (5, 5)
+    assert coil.position == (7, 5)
+    assert target.position == (8, 5)
 
 
 def test_invalid_arena_dimensions_and_player_limit_are_rejected() -> None:

@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass, field
 from math import floor
+from random import Random
 from typing import TypeAlias
 
 Position: TypeAlias = tuple[int, int]
@@ -13,6 +14,7 @@ COIL_FUSE_SECONDS = 2.5
 COIL_RANGE = 2
 COIL_CAPACITY = 4
 LIGHTNING_VISUAL_SECONDS = 0.65
+KICK_POWERUP_DROP_CHANCE = 0.25
 
 
 class GameError(ValueError):
@@ -28,6 +30,7 @@ class Player:
     lives: int = 1
     coil_capacity: int = COIL_CAPACITY
     coil_range: int = COIL_RANGE
+    can_kick: bool = False
 
     @property
     def alive(self) -> bool:
@@ -60,9 +63,11 @@ class GameState:
     player_limit: int
     hard_walls: set[Position] = field(default_factory=set)
     soft_blocks: set[Position] = field(default_factory=set)
+    powerups: dict[Position, str] = field(default_factory=dict)
     players: dict[str, Player] = field(default_factory=dict)
     coils: dict[int, TeslaCoil] = field(default_factory=dict)
     lightning_effects: list[LightningEffect] = field(default_factory=list)
+    _random: Random = field(default_factory=Random, repr=False)
     _next_player_id: int = 1
     _next_coil_id: int = 1
 
@@ -141,23 +146,54 @@ class GameState:
         if abs(dx) + abs(dy) != 1:
             raise GameError("Players can move one tile in one cardinal direction.")
         destination = (player.x + dx, player.y + dy)
+        coil = next(
+            (coil for coil in self.coils.values() if coil.position == destination),
+            None,
+        )
+        if coil is not None:
+            if not player.can_kick:
+                raise GameError("That tile is blocked.")
+            self._kick_coil(coil, dx, dy)
         occupied_by_player = any(
             other.alive and other.position == destination
             for other in self.players.values()
             if other.id != player.id
         )
-        occupied_by_coil = any(
-            coil.position == destination for coil in self.coils.values()
-        )
         if (
             destination in self.hard_walls
             or destination in self.soft_blocks
             or occupied_by_player
-            or occupied_by_coil
         ):
             raise GameError("That tile is blocked.")
         player.x, player.y = destination
+        powerup = self.powerups.pop(destination, None)
+        if powerup == "kick":
+            player.can_kick = True
         return destination
+
+    def _kick_coil(self, coil: TeslaCoil, dx: int, dy: int) -> None:
+        next_position = (coil.position[0] + dx, coil.position[1] + dy)
+        moved = False
+        while not self._coil_path_is_blocked(next_position, coil.id):
+            coil.position = next_position
+            moved = True
+            next_position = (coil.position[0] + dx, coil.position[1] + dy)
+        if not moved:
+            raise GameError("The Tesla coil cannot be kicked in that direction.")
+
+    def _coil_path_is_blocked(self, position: Position, coil_id: int) -> bool:
+        return (
+            position in self.hard_walls
+            or position in self.soft_blocks
+            or any(
+                player.alive and player.position == position
+                for player in self.players.values()
+            )
+            or any(
+                other.id != coil_id and other.position == position
+                for other in self.coils.values()
+            )
+        )
 
     def place_coil(self, player_id: str, now: float) -> TeslaCoil:
         player = self._get_living_player(player_id)
@@ -217,6 +253,11 @@ class GameState:
                 cells.add(position)
                 if position in self.soft_blocks:
                     self.soft_blocks.remove(position)
+                    if (
+                        position not in self.powerups
+                        and self._random.random() < KICK_POWERUP_DROP_CHANCE
+                    ):
+                        self.powerups[position] = "kick"
                     break
         return cells
 
@@ -229,6 +270,10 @@ class GameState:
             "player_limit": self.player_limit,
             "hard_walls": [list(position) for position in sorted(self.hard_walls)],
             "soft_blocks": [list(position) for position in sorted(self.soft_blocks)],
+            "powerups": [
+                {"x": position[0], "y": position[1], "type": powerup}
+                for position, powerup in sorted(self.powerups.items())
+            ],
             "players": [
                 {
                     "id": player.id,
@@ -237,6 +282,7 @@ class GameState:
                     "y": player.y,
                     "lives": player.lives,
                     "alive": player.alive,
+                    "can_kick": player.can_kick,
                     "coil_slots": player.coil_capacity
                     - sum(
                         coil.owner_id == player.id for coil in self.coils.values()

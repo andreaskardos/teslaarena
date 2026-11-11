@@ -129,6 +129,7 @@ function render() {
   context.fillRect(0, 0, canvas.width, canvas.height);
   drawCells(gameState.hard_walls, "#35445e", cellSize, 2);
   drawCells(gameState.soft_blocks, "#a35c44", cellSize, 3);
+  drawPowerups(gameState.powerups || [], cellSize);
   for (const coil of gameState.coils) {
     const center = cellCenter(coil.x, coil.y, cellSize);
     context.fillStyle = "#ffca62";
@@ -158,13 +159,39 @@ function render() {
   playerList.replaceChildren();
   for (const player of gameState.players) {
     const item = document.createElement("li");
-    item.textContent = `${player.name} · ${player.alive ? `${player.lives} liv · ${player.coil_slots} lediga coils` : "ute"}`;
+    const abilities = [
+      `${player.lives} liv`,
+      `${player.coil_slots} lediga coils`,
+      ...(player.can_kick ? ["Kick"] : []),
+    ].join(" · ");
+    item.textContent = `${player.name} · ${player.alive ? abilities : "ute"}`;
     if (!player.alive) item.style.color = "#78869e";
     playerList.append(item);
   }
   if (gameState.winner_id) {
     const winner = gameState.players.find((player) => player.id === gameState.winner_id);
     status.textContent = `${winner.name} vann matchen!`;
+  }
+}
+
+function drawPowerups(powerups, size) {
+  for (const powerup of powerups) {
+    if (powerup.type !== "kick") continue;
+    const center = cellCenter(powerup.x, powerup.y, size);
+    context.save();
+    context.translate(center.x, center.y);
+    context.rotate(Math.PI / 4);
+    context.fillStyle = "#153f35";
+    context.fillRect(-size * 0.34, -size * 0.34, size * 0.68, size * 0.68);
+    context.strokeStyle = "#8cff9b";
+    context.lineWidth = 2;
+    context.strokeRect(-size * 0.34, -size * 0.34, size * 0.68, size * 0.68);
+    context.restore();
+    context.fillStyle = "#bcffc2";
+    context.font = `bold ${Math.round(size * 0.62)}px sans-serif`;
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText("K", center.x, center.y + 1);
   }
 }
 
