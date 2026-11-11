@@ -58,7 +58,9 @@ async function joinRoom(roomId, inviteCode, name) {
     if (message.type === "state") {
       gameState = message.state;
       const startButton = document.querySelector("#start-button");
-      startButton.disabled = gameState.players.length < 2 || gameState.phase !== "lobby";
+      const playingAlone = gameState.players.length === 1;
+      startButton.disabled = gameState.phase !== "lobby";
+      startButton.textContent = playingAlone ? "Starta mot botar" : "Starta match";
       startButton.classList.toggle("hidden", session.role !== "creator" || gameState.phase !== "lobby");
       const localPlayer = gameState.players.find((player) => player.id === session.member_id);
       document.querySelector("#remote-button").classList.toggle(
@@ -71,7 +73,9 @@ async function joinRoom(roomId, inviteCode, name) {
       const gameStatus = document.querySelector("#game-status");
       if (gameState.phase === "lobby") {
         gameStatus.textContent = session.role === "creator"
-          ? `Väntar på spelare (${gameState.players.length}/${gameState.player_limit}). Du startar matchen.`
+          ? playingAlone
+            ? `Väntar på spelare (1/${gameState.player_limit}). Startar du ensam fyller AI-botar med olika svårighetsgrad upp rummet.`
+            : `Väntar på spelare (${gameState.players.length}/${gameState.player_limit}). Du startar matchen.`
           : `Väntar på att värden startar (${gameState.players.length}/${gameState.player_limit}).`;
       } else if (session.role === "spectator") {
         gameStatus.textContent = gameState.phase === "finished" ? "Matchen är avslutad." : "Du tittar på matchen som observatör.";
@@ -233,7 +237,7 @@ function render() {
       ...(player.has_speed_up ? ["Speed Up"] : []),
       ...(player.has_remote ? ["Remote Control"] : []),
     ].join(" · ");
-    item.textContent = `${player.name} · ${player.alive ? abilities : "ute"}`;
+    item.textContent = `${player.bot_skill ? "🤖 " : ""}${player.name} · ${player.alive ? abilities : "ute"}`;
     if (!player.alive) item.style.color = "#78869e";
     playerList.append(item);
   }

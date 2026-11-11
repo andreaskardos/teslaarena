@@ -41,6 +41,7 @@ class Player:
     has_speed_up: bool = False
     has_remote: bool = False
     next_move_at: float = 0
+    bot_skill: str | None = None
 
     @property
     def alive(self) -> bool:
@@ -387,25 +388,34 @@ class GameState:
             exploded.append(coil.id)
         return exploded
 
-    def _lightning_cells(self, coil: TeslaCoil) -> set[Position]:
-        cells = {coil.position}
-        x, y = coil.position
+    def blast_cells(self, origin: Position, coil_range: int) -> list[Position]:
+        """Cells a coil at ``origin`` would hit, without changing the arena."""
+        cells = [origin]
+        x, y = origin
         directions = ((1, 0), (-1, 0), (0, 1), (0, -1))
         for dx, dy in directions:
-            for distance in range(1, self.players[coil.owner_id].coil_range + 1):
+            for distance in range(1, coil_range + 1):
                 position = (x + dx * distance, y + dy * distance)
                 if position in self.hard_walls:
                     break
-                cells.add(position)
+                cells.append(position)
                 if position in self.soft_blocks:
-                    self.soft_blocks.remove(position)
-                    if (
-                        position not in self.powerups
-                        and self._random.random() < POWERUP_DROP_CHANCE
-                    ):
-                        self.powerups[position] = self._random.choice(BLOCK_POWERUPS)
                     break
         return cells
+
+    def _lightning_cells(self, coil: TeslaCoil) -> set[Position]:
+        cells = self.blast_cells(
+            coil.position, self.players[coil.owner_id].coil_range
+        )
+        for position in cells:
+            if position in self.soft_blocks:
+                self.soft_blocks.remove(position)
+                if (
+                    position not in self.powerups
+                    and self._random.random() < POWERUP_DROP_CHANCE
+                ):
+                    self.powerups[position] = self._random.choice(BLOCK_POWERUPS)
+        return set(cells)
 
     def snapshot(self) -> dict[str, object]:
         living = [player for player in self.players.values() if player.alive]
@@ -437,6 +447,7 @@ class GameState:
                     "move_interval": player.move_interval,
                     "has_speed_up": player.has_speed_up,
                     "has_remote": player.has_remote,
+                    "bot_skill": player.bot_skill,
                     "coil_slots": player.coil_capacity
                     - sum(
                         coil.owner_id == player.id for coil in self.coils.values()

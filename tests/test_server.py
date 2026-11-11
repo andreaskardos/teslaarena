@@ -239,25 +239,54 @@ def test_broadcast_skips_unchanged_state_and_drops_dead_connections() -> None:
     assert room.connections == {"player-1": healthy}
 
 
-def test_only_room_creator_can_start_and_two_players_are_required() -> None:
+def test_only_room_creator_can_start_the_match() -> None:
     rooms.rooms.clear()
     client = TestClient(app)
-    room = client.post("/api/rooms", json={"private": False}).json()
-    host = client.post(
-        f"/api/rooms/{room['room_id']}/join", json={"name": "Host"}
-    ).json()
+    room, host, guest = _create_started_room(client)
 
-    too_early = client.post(
-        f"/api/rooms/{room['room_id']}/start",
-        headers={"X-Player-Token": host["token"]},
-    )
-    assert too_early.status_code == 409
-
-    guest = client.post(
-        f"/api/rooms/{room['room_id']}/join", json={"name": "Guest"}
-    ).json()
     unauthorized = client.post(
         f"/api/rooms/{room['room_id']}/start",
         headers={"X-Player-Token": guest["token"]},
     )
     assert unauthorized.status_code == 403
+    started = client.post(
+        f"/api/rooms/{room['room_id']}/start",
+        headers={"X-Player-Token": host["token"]},
+    )
+    assert started.json() == {"phase": "playing"}
+    assert rooms.rooms[room["room_id"]].bots == {}
+
+
+def test_lone_creator_starts_against_bots_that_play() -> None:
+    rooms.rooms.clear()
+    with TestClient(app) as client:
+        room = client.post("/api/rooms", json={"private": False}).json()
+        host = client.post(
+            f"/api/rooms/{room['room_id']}/join", json={"name": "Solo"}
+        ).json()
+        url = f"{host['websocket_path']}?token={host['token']}"
+        with client.websocket_connect(url) as websocket:
+            websocket.receive_json()
+            started = client.post(
+                f"/api/rooms/{room['room_id']}/start",
+                headers={"X-Player-Token": host["token"]},
+            )
+            assert started.json() == {"phase": "playing"}
+            playing = _receive_until(
+                websocket, _is_state(lambda state: state["phase"] == "playing")
+            )
+            bots = [p for p in playing["state"]["players"] if p["bot_skill"]]
+            assert [bot["bot_skill"] for bot in bots] == ["easy", "medium", "hard"]
+            spawns = {bot["id"]: (bot["x"], bot["y"]) for bot in bots}
+
+            # The room loop drives the bots without any client input.
+            _receive_until(
+                websocket,
+                _is_state(
+                    lambda state: any(
+                        (p["x"], p["y"]) != spawns[p["id"]]
+                        for p in state["players"]
+                        if p["id"] in spawns
+                    )
+                ),
+            )

@@ -11,8 +11,9 @@
 - [x] Bomb Up power-up drops, collection, and increased coil capacity.
 - [x] Players start with one coil slot; Bomb Up adds another slot.
 - [x] Speed Up power-up drops, collection, and faster movement.
-- [x] Creator-controlled match start after at least two players join.
+- [x] Creator-controlled match start.
 - [x] Single-room game loop that ticks matches and broadcasts only state changes.
+- [x] AI bots (easy, medium, hard) when the creator starts alone.
 - [x] Spectator-only access for players joining after match start.
 - [x] Remote Control power-up and chain detonation.
 - [x] Choose the number of destructible blocks when creating a room.

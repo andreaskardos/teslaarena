@@ -212,7 +212,11 @@ async def _run_room_loop(room: Room) -> None:
     """Advance one room's match at a fixed rate and broadcast state changes."""
     next_tick = time.monotonic()
     while room.connections:
-        room.game.tick(time.monotonic())
+        now = time.monotonic()
+        if room.phase == "playing":
+            for bot in room.bots.values():
+                bot.act(room.game, now)
+        room.game.tick(now)
         await _broadcast(room)
         next_tick += TICK_SECONDS
         delay = next_tick - time.monotonic()
