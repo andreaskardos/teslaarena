@@ -11,12 +11,15 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from tesla_arena.game import GameError
+from tesla_arena.game import DEFAULT_SOFT_BLOCK_COUNT, MAX_SOFT_BLOCK_COUNT, GameError
 from tesla_arena.rooms import Room, RoomManager
 
 
 class CreateRoomRequest(BaseModel):
     private: bool = False
+    soft_block_count: int = Field(
+        default=DEFAULT_SOFT_BLOCK_COUNT, ge=0, le=MAX_SOFT_BLOCK_COUNT
+    )
 
 
 class JoinRoomRequest(BaseModel):
@@ -52,8 +55,14 @@ async def list_rooms() -> list[dict[str, object]]:
 
 @app.post("/api/rooms")
 async def create_room(request: CreateRoomRequest) -> dict[str, object]:
-    room, invite_code = rooms.create_room(request.private)
-    result: dict[str, object] = {"room_id": room.id, "max_players": room.game.player_limit}
+    room, invite_code = rooms.create_room(
+        request.private, request.soft_block_count
+    )
+    result: dict[str, object] = {
+        "room_id": room.id,
+        "max_players": room.game.player_limit,
+        "soft_block_count": room.game.soft_block_count,
+    }
     if invite_code is not None:
         result["invite_code"] = invite_code
     return result

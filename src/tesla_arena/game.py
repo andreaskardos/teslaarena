@@ -10,6 +10,8 @@ Position: TypeAlias = tuple[int, int]
 
 MAX_PLAYERS = 12
 DEFAULT_ARENA_SIZE = 35
+DEFAULT_SOFT_BLOCK_COUNT = 16
+MAX_SOFT_BLOCK_COUNT = 200
 COIL_FUSE_SECONDS = 2.5
 COIL_RANGE = 2
 COIL_CAPACITY = 4
@@ -65,6 +67,7 @@ class GameState:
     width: int
     height: int
     player_limit: int
+    soft_block_count: int = DEFAULT_SOFT_BLOCK_COUNT
     hard_walls: set[Position] = field(default_factory=set)
     soft_blocks: set[Position] = field(default_factory=set)
     powerups: dict[Position, str] = field(default_factory=dict)
@@ -81,11 +84,19 @@ class GameState:
         width: int = DEFAULT_ARENA_SIZE,
         height: int = DEFAULT_ARENA_SIZE,
         player_limit: int = MAX_PLAYERS,
+        soft_block_count: int | None = None,
     ) -> GameState:
         if width < 7 or height < 7:
             raise GameError("Arena dimensions must be at least 7 by 7.")
         if not 2 <= player_limit <= MAX_PLAYERS:
             raise GameError(f"Player limit must be between 2 and {MAX_PLAYERS}.")
+        if (
+            soft_block_count is not None
+            and not 0 <= soft_block_count <= MAX_SOFT_BLOCK_COUNT
+        ):
+            raise GameError(
+                f"Soft block count must be between 0 and {MAX_SOFT_BLOCK_COUNT}."
+            )
 
         arena = cls(width, height, player_limit)
         spawn_points = arena.spawn_points()
@@ -96,18 +107,43 @@ class GameState:
                     arena.hard_walls.add(position)
                 elif x % 2 == 0 and y % 2 == 0:
                     arena.hard_walls.add(position)
-                elif (
-                    1 < x < width - 2
-                    and 1 < y < height - 2
-                    and x % 2 == 1
-                    and y % 2 == 1
-                    and (x * 17 + y * 31) % 13 == 0
-                    and all(
-                        abs(x - spawn_x) + abs(y - spawn_y) > 2
-                        for spawn_x, spawn_y in spawn_points
-                    )
-                ):
-                    arena.soft_blocks.add(position)
+        safe_positions = [
+            (x, y)
+            for y in range(2, height - 2)
+            for x in range(2, width - 2)
+            if (x, y) not in arena.hard_walls
+            and all(
+                abs(x - spawn_x) + abs(y - spawn_y) > 2
+                for spawn_x, spawn_y in spawn_points
+            )
+        ]
+        original_layout = [
+            (x, y)
+            for x, y in safe_positions
+            if x % 2 == 1 and y % 2 == 1 and (x * 17 + y * 31) % 13 == 0
+        ]
+        if soft_block_count is None:
+            soft_block_count = min(DEFAULT_SOFT_BLOCK_COUNT, len(safe_positions))
+        arena.soft_block_count = soft_block_count
+        if soft_block_count <= len(original_layout):
+            arena.soft_blocks = set(
+                arena._random.sample(original_layout, soft_block_count)
+            )
+        else:
+            remaining_positions = [
+                position
+                for position in safe_positions
+                if position not in original_layout
+            ]
+            additional_count = soft_block_count - len(original_layout)
+            if additional_count > len(remaining_positions):
+                raise GameError(
+                    f"Soft block count exceeds this arena's capacity of "
+                    f"{len(safe_positions)}."
+                )
+            arena.soft_blocks = set(original_layout) | set(
+                arena._random.sample(remaining_positions, additional_count)
+            )
         return arena
 
     def spawn_points(self) -> list[Position]:
@@ -313,6 +349,8 @@ class GameState:
             "width": self.width,
             "height": self.height,
             "player_limit": self.player_limit,
+            "soft_block_count": self.soft_block_count,
+            "soft_blocks_remaining": len(self.soft_blocks),
             "hard_walls": [list(position) for position in sorted(self.hard_walls)],
             "soft_blocks": [list(position) for position in sorted(self.soft_blocks)],
             "powerups": [

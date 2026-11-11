@@ -20,6 +20,36 @@ def test_default_arena_has_twelve_safe_spawns_at_least_ten_tiles_apart() -> None
     ) >= 10
 
 
+def test_small_arena_default_block_count_fits_available_space() -> None:
+    game = GameState.create(width=7, height=7, player_limit=2)
+
+    assert len(game.soft_blocks) == game.soft_block_count
+    assert game.soft_block_count < 16
+
+
+@pytest.mark.parametrize("block_count", [0, 1, 16, 75, 200])
+def test_arena_has_exact_requested_number_of_safe_soft_blocks(block_count: int) -> None:
+    game = GameState.create(soft_block_count=block_count)
+    spawn_points = game.spawn_points()
+
+    assert game.soft_block_count == block_count
+    assert len(game.soft_blocks) == block_count
+    assert not game.soft_blocks & game.hard_walls
+    assert all(
+        abs(x - spawn_x) + abs(y - spawn_y) > 2
+        for x, y in game.soft_blocks
+        for spawn_x, spawn_y in spawn_points
+    )
+
+
+@pytest.mark.parametrize("block_count", [-1, 201])
+def test_arena_rejects_soft_block_counts_outside_supported_range(
+    block_count: int,
+) -> None:
+    with pytest.raises(GameError, match="between 0 and 200"):
+        GameState.create(soft_block_count=block_count)
+
+
 def test_game_accepts_twelve_players_and_rejects_thirteenth() -> None:
     game = GameState.create()
     for index in range(MAX_PLAYERS):

@@ -6,7 +6,13 @@ from hmac import compare_digest
 
 from starlette.websockets import WebSocket
 
-from tesla_arena.game import DEFAULT_ARENA_SIZE, MAX_PLAYERS, GameError, GameState
+from tesla_arena.game import (
+    DEFAULT_ARENA_SIZE,
+    DEFAULT_SOFT_BLOCK_COUNT,
+    MAX_PLAYERS,
+    GameError,
+    GameState,
+)
 
 
 @dataclass
@@ -23,6 +29,7 @@ class Room:
             "id": self.id,
             "players": len(self.game.players),
             "max_players": self.game.player_limit,
+            "soft_block_count": self.game.soft_block_count,
         }
 
 
@@ -30,7 +37,11 @@ class RoomManager:
     def __init__(self) -> None:
         self.rooms: dict[str, Room] = {}
 
-    def create_room(self, private: bool) -> tuple[Room, str | None]:
+    def create_room(
+        self,
+        private: bool,
+        soft_block_count: int = DEFAULT_SOFT_BLOCK_COUNT,
+    ) -> tuple[Room, str | None]:
         room_id = secrets.token_hex(3).upper()
         while room_id in self.rooms:
             room_id = secrets.token_hex(3).upper()
@@ -43,6 +54,7 @@ class RoomManager:
                 width=DEFAULT_ARENA_SIZE,
                 height=DEFAULT_ARENA_SIZE,
                 player_limit=MAX_PLAYERS,
+                soft_block_count=soft_block_count,
             ),
         )
         self.rooms[room.id] = room

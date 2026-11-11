@@ -17,6 +17,8 @@
       <section id="lobby" class="panel">
         <form id="create-form">
           <label><input id="private-room" type="checkbox"> Privat rum</label>
+          <label for="soft-block-count">Förstörbara lådor</label>
+          <input id="soft-block-count" type="number" min="0" max="200" value="16" required>
           <button type="submit">Skapa spelrum</button>
         </form>
         <form id="join-form">

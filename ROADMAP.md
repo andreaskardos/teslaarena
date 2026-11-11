@@ -9,6 +9,7 @@
 - [x] Kick power-up drops, collection, and coil sliding.
 - [x] Fire Up power-up drops, collection, and increased lightning range.
 - [x] Bomb Up power-up drops, collection, and increased coil capacity.
+- [x] Choose the number of destructible blocks when creating a room.
 - [x] Browser lobby and arena with keyboard controls.
 - [x] Automated game, room, HTTP, and WebSocket tests.
 - [x] Windows virtual-environment setup and dependency list.

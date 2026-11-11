@@ -54,6 +54,8 @@ For the development roadmap and steps to resume work in a new session, see
   clear perimeter; neighboring spawn points are at least 10 Manhattan tiles
   apart. Interior pillars and destructible blocks add obstacles without
   blocking the perimeter route.
+- When creating a room, choose between 0 and 200 destructible blocks. The
+  default remains 16. Blocks are distributed away from player spawn points.
 - Players can place up to four Tesla coils at once. Coils discharge after
   2.5 seconds, sending a cross-shaped electric attack up to two tiles in each
   direction. Hard walls stop the attack; a soft block is destroyed and absorbs

@@ -25,7 +25,7 @@ async function refreshRooms() {
     list.replaceChildren();
     for (const room of rooms) {
       const item = document.createElement("li");
-      item.textContent = `${room.id} · ${room.players}/${room.max_players} spelare`;
+      item.textContent = `${room.id} · ${room.players}/${room.max_players} spelare · ${room.soft_block_count} lådor`;
       list.append(item);
     }
     if (!rooms.length) {
@@ -66,7 +66,10 @@ document.querySelector("#create-form").addEventListener("submit", async (event) 
   try {
     const room = await request("/api/rooms", {
       method: "POST",
-      body: JSON.stringify({ private: document.querySelector("#private-room").checked }),
+      body: JSON.stringify({
+        private: document.querySelector("#private-room").checked,
+        soft_block_count: Number(document.querySelector("#soft-block-count").value),
+      }),
     });
     document.querySelector("#room-id").value = room.room_id;
     if (room.invite_code) {
