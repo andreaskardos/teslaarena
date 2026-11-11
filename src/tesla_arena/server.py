@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import secrets
 import time
 from pathlib import Path
@@ -49,6 +50,7 @@ DIRECTIONS = {
     "left": (-1, 0),
     "right": (1, 0),
 }
+TICK_SECONDS = 0.05
 
 
 @app.get("/")
@@ -148,43 +150,80 @@ async def game_socket(websocket: WebSocket, room_id: str, player_id: str) -> Non
 
     await websocket.accept()
     room.connections[player_id] = websocket
+    # The newcomer always gets the current state; others only if it changed.
+    await websocket.send_text(_state_message(room))
     await _broadcast(room)
+    _ensure_room_loop(room)
     try:
         while True:
+            message = await websocket.receive_text()
             try:
-                message = await asyncio.wait_for(websocket.receive_text(), timeout=0.1)
-            except asyncio.TimeoutError:
-                room.game.tick(time.monotonic())
-                await _broadcast(room)
-                continue
-
-            try:
-                action = GameAction.model_validate_json(message)
-                if is_spectator:
-                    raise GameError("Spectators cannot control the match.")
-                if not room.started:
-                    raise GameError("The room creator has not started the match.")
-                if action.type == "move":
-                    if action.direction is None:
-                        raise GameError("A movement direction is required.")
-                    room.game.move(
-                        player_id, *DIRECTIONS[action.direction], now=time.monotonic()
-                    )
-                else:
-                    now = time.monotonic()
-                    if action.type == "place_coil":
-                        room.game.place_coil(player_id, now)
-                    else:
-                        room.game.detonate_remote(player_id, now)
-                room.game.tick(time.monotonic())
+                _apply_action(room, player_id, is_spectator, message)
             except (ValueError, GameError) as error:
                 await websocket.send_json({"type": "error", "message": str(error)})
-            await _broadcast(room)
     except WebSocketDisconnect:
-        room.connections.pop(player_id, None)
+        pass
+    finally:
+        if room.connections.get(player_id) is websocket:
+            del room.connections[player_id]
+        if not room.connections:
+            await _stop_room_loop(room)
 
 
-async def _broadcast(room: Room) -> None:
+def _apply_action(
+    room: Room, player_id: str, is_spectator: bool, message: str
+) -> None:
+    """Apply one client action. The room loop ticks and broadcasts the result."""
+    action = GameAction.model_validate_json(message)
+    if is_spectator:
+        raise GameError("Spectators cannot control the match.")
+    if not room.started:
+        raise GameError("The room creator has not started the match.")
+    now = time.monotonic()
+    room.game.tick(now)
+    if action.type == "move":
+        if action.direction is None:
+            raise GameError("A movement direction is required.")
+        room.game.move(player_id, *DIRECTIONS[action.direction], now=now)
+    elif action.type == "place_coil":
+        room.game.place_coil(player_id, now)
+    else:
+        room.game.detonate_remote(player_id, now)
+
+
+def _ensure_room_loop(room: Room) -> None:
+    if room.loop_task is None or room.loop_task.done():
+        room.loop_task = asyncio.create_task(_run_room_loop(room))
+
+
+async def _stop_room_loop(room: Room) -> None:
+    task = room.loop_task
+    room.loop_task = None
+    if task is None or task.done():
+        return
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+
+async def _run_room_loop(room: Room) -> None:
+    """Advance one room's match at a fixed rate and broadcast state changes."""
+    next_tick = time.monotonic()
+    while room.connections:
+        room.game.tick(time.monotonic())
+        await _broadcast(room)
+        next_tick += TICK_SECONDS
+        delay = next_tick - time.monotonic()
+        if delay < 0:
+            # Fell behind (e.g. a slow send); resynchronize instead of bursting.
+            next_tick = time.monotonic()
+            delay = 0
+        await asyncio.sleep(delay)
+
+
+def _state_message(room: Room) -> str:
     state = room.game.snapshot()
     state.update(
         {
@@ -194,13 +233,23 @@ async def _broadcast(room: Room) -> None:
             "spectators": list(room.spectator_names.values()),
         }
     )
-    message = {"type": "state", "state": state}
+    return json.dumps({"type": "state", "state": state})
+
+
+async def _broadcast(room: Room) -> None:
+    """Send the room state to every connection, but only if it has changed."""
+    message = _state_message(room)
+    if message == room.last_state_message:
+        return
+    room.last_state_message = message
     stale: list[str] = []
     for player_id, connection in list(room.connections.items()):
         try:
-            await connection.send_json(message)
-        except WebSocketDisconnect:
+            await connection.send_text(message)
+        except Exception:  # noqa: BLE001 - any send failure means a dead socket
             stale.append(player_id)
     for player_id in stale:
         room.connections.pop(player_id, None)
+
+
 app.mount("/", StaticFiles(directory=WEB_DIRECTORY), name="web")

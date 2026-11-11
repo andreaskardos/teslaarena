@@ -1,6 +1,8 @@
+import asyncio
+
 from fastapi.testclient import TestClient
 
-from tesla_arena.server import app, rooms
+from tesla_arena.server import _broadcast, app, rooms
 
 
 def test_lobby_and_private_room_http_flow() -> None:
@@ -110,58 +112,131 @@ def test_room_creation_rejects_unsupported_arena_size() -> None:
     assert response.status_code == 422
 
 
-def test_websocket_sends_state_and_accepts_game_actions() -> None:
-    rooms.rooms.clear()
-    client = TestClient(app)
+def _receive_until(websocket, predicate, limit: int = 200) -> dict:
+    """Read messages until one matches; the room loop may send extra states."""
+    for _ in range(limit):
+        message = websocket.receive_json()
+        if predicate(message):
+            return message
+    raise AssertionError("Expected message was not received.")
+
+
+def _is_state(predicate):
+    return lambda message: message["type"] == "state" and predicate(
+        message["state"]
+    )
+
+
+def _create_started_room(client: TestClient) -> tuple[dict, dict, dict]:
     room = client.post("/api/rooms", json={"private": False}).json()
-    joined = client.post(
-        f"/api/rooms/{room['room_id']}/join", json={"name": "Player"}
+    host = client.post(
+        f"/api/rooms/{room['room_id']}/join", json={"name": "Host"}
     ).json()
     guest = client.post(
         f"/api/rooms/{room['room_id']}/join", json={"name": "Guest"}
     ).json()
-    url = f"{joined['websocket_path']}?token={joined['token']}"
+    return room, host, guest
 
-    with client.websocket_connect(url) as websocket:
-        initial = websocket.receive_json()
-        assert initial["type"] == "state"
-        assert initial["state"]["player_limit"] == 12
-        assert initial["state"]["players"][0]["coil_capacity"] == 1
-        assert initial["state"]["phase"] == "lobby"
-        websocket.send_json({"type": "place_coil"})
-        rejected = websocket.receive_json()
-        assert rejected == {
-            "type": "error",
-            "message": "The room creator has not started the match.",
-        }
-        websocket.receive_json()
-        assert client.post(
+
+def test_websocket_sends_state_and_accepts_game_actions() -> None:
+    rooms.rooms.clear()
+    with TestClient(app) as client:
+        room, joined, _guest = _create_started_room(client)
+        url = f"{joined['websocket_path']}?token={joined['token']}"
+
+        with client.websocket_connect(url) as websocket:
+            initial = websocket.receive_json()
+            assert initial["type"] == "state"
+            assert initial["state"]["player_limit"] == 12
+            assert initial["state"]["players"][0]["coil_capacity"] == 1
+            assert initial["state"]["phase"] == "lobby"
+            websocket.send_json({"type": "place_coil"})
+            assert _receive_until(
+                websocket, lambda message: message["type"] == "error"
+            ) == {
+                "type": "error",
+                "message": "The room creator has not started the match.",
+            }
+            assert client.post(
+                f"/api/rooms/{room['room_id']}/start",
+                headers={"X-Player-Token": joined["token"]},
+            ).json() == {"phase": "playing"}
+            _receive_until(
+                websocket, _is_state(lambda state: state["phase"] == "playing")
+            )
+            websocket.send_json({"type": "place_coil"})
+            _receive_until(websocket, _is_state(lambda state: len(state["coils"]) == 1))
+
+        late_join = client.post(
+            f"/api/rooms/{room['room_id']}/join", json={"name": "Viewer"}
+        ).json()
+        assert late_join["role"] == "spectator"
+        assert late_join["member_id"].startswith("spectator-")
+        spectator_url = f"{late_join['websocket_path']}?token={late_join['token']}"
+        with client.websocket_connect(spectator_url) as websocket:
+            initial = websocket.receive_json()
+            assert initial["state"]["spectator_count"] == 1
+            websocket.send_json({"type": "place_coil"})
+            assert _receive_until(
+                websocket, lambda message: message["type"] == "error"
+            ) == {
+                "type": "error",
+                "message": "Spectators cannot control the match.",
+            }
+
+
+def test_room_loop_advances_match_without_client_messages() -> None:
+    rooms.rooms.clear()
+    with TestClient(app) as client:
+        room, host, guest = _create_started_room(client)
+        client.post(
             f"/api/rooms/{room['room_id']}/start",
-            headers={"X-Player-Token": joined["token"]},
-        ).json() == {"phase": "playing"}
-        updated = websocket.receive_json()
-        assert updated["state"]["phase"] == "playing"
-        websocket.send_json({"type": "place_coil"})
-        updated = websocket.receive_json()
-        assert updated["type"] == "state"
-        assert len(updated["state"]["coils"]) == 1
+            headers={"X-Player-Token": host["token"]},
+        )
+        host_url = f"{host['websocket_path']}?token={host['token']}"
+        guest_url = f"{guest['websocket_path']}?token={guest['token']}"
+        with client.websocket_connect(host_url) as host_ws, client.websocket_connect(
+            guest_url
+        ) as guest_ws:
+            game_room = rooms.rooms[room["room_id"]]
+            assert game_room.loop_task is not None
+            host_ws.send_json({"type": "place_coil"})
+            _receive_until(host_ws, _is_state(lambda state: len(state["coils"]) == 1))
+            # Expire the fuse; only the server loop can notice and explode it.
+            for coil in game_room.game.coils.values():
+                coil.explodes_at = 0
+            exploded = _is_state(
+                lambda state: not state["coils"] and state["lightning"]
+            )
+            _receive_until(host_ws, exploded)
+            _receive_until(guest_ws, exploded)
 
-    late_join = client.post(
-        f"/api/rooms/{room['room_id']}/join", json={"name": "Viewer"}
-    ).json()
-    assert late_join["role"] == "spectator"
-    assert late_join["member_id"].startswith("spectator-")
-    spectator_url = f"{late_join['websocket_path']}?token={late_join['token']}"
-    with client.websocket_connect(spectator_url) as websocket:
-        initial = websocket.receive_json()
-        assert initial["state"]["spectator_count"] == 1
-        websocket.send_json({"type": "place_coil"})
-        rejected = websocket.receive_json()
-        assert rejected == {
-            "type": "error",
-            "message": "Spectators cannot control the match.",
-        }
-        websocket.receive_json()
+        assert game_room.connections == {}
+        assert game_room.loop_task is None
+
+
+class _FakeConnection:
+    def __init__(self, fail: bool = False) -> None:
+        self.fail = fail
+        self.sent: list[str] = []
+
+    async def send_text(self, message: str) -> None:
+        if self.fail:
+            raise RuntimeError("Cannot send once the socket is closed.")
+        self.sent.append(message)
+
+
+def test_broadcast_skips_unchanged_state_and_drops_dead_connections() -> None:
+    rooms.rooms.clear()
+    room, _invite = rooms.create_room(False)
+    healthy, dead = _FakeConnection(), _FakeConnection(fail=True)
+    room.connections = {"player-1": healthy, "player-2": dead}
+
+    asyncio.run(_broadcast(room))
+    asyncio.run(_broadcast(room))
+
+    assert len(healthy.sent) == 1
+    assert room.connections == {"player-1": healthy}
 
 
 def test_only_room_creator_can_start_and_two_players_are_required() -> None:

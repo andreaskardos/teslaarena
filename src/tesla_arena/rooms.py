@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import secrets
 from dataclasses import dataclass, field
 from hmac import compare_digest
@@ -27,6 +28,8 @@ class Room:
     spectator_tokens: dict[str, str] = field(default_factory=dict)
     spectator_names: dict[str, str] = field(default_factory=dict)
     connections: dict[str, WebSocket] = field(default_factory=dict)
+    loop_task: asyncio.Task[None] | None = None
+    last_state_message: str | None = None
     _next_spectator_id: int = 1
 
     @property
