@@ -50,12 +50,13 @@ For the development roadmap and steps to resume work in a new session, see
 
 ## Battle rules
 
-- The arena is 35 by 35 tiles. Twelve spawn points are distributed around its
-  clear perimeter; neighboring spawn points are at least 10 Manhattan tiles
-  apart. Interior pillars and destructible blocks add obstacles without
-  blocking the perimeter route.
-- When creating a room, choose between 0 and 200 destructible blocks. The
-  default remains 16. Blocks are distributed away from player spawn points.
+- When creating a room, choose a 25×25, 35×35, or 45×45 arena and set the
+  player limit from 2 to 12. Twelve-player rooms retain their clear perimeter
+  spawns, at least 10 Manhattan tiles apart on the default 35×35 arena.
+- Choose destructible block density from 0% to 100%. The percentage is applied
+  to available interior tiles after spawn safety zones are reserved. The
+  default is 2.3% (16 blocks on the default 35×35, 12-player map).
+- Players can place their starting Tesla coil immediately after joining.
 - Players start with one Tesla coil slot. Bomb Up power-ups increase the number
   of coils they can place at once. Coils discharge after
   2.5 seconds, sending a cross-shaped electric attack up to two tiles in each

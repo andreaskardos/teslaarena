@@ -17,8 +17,29 @@
       <section id="lobby" class="panel">
         <form id="create-form">
           <label><input id="private-room" type="checkbox"> Privat rum</label>
-          <label for="soft-block-count">Förstörbara lådor</label>
-          <input id="soft-block-count" type="number" min="0" max="200" value="16" required>
+          <label for="arena-size">Arenastorlek</label>
+          <select id="arena-size">
+            <option value="25">Liten · 25×25</option>
+            <option value="35" selected>Medel · 35×35</option>
+            <option value="45">Stor · 45×45</option>
+          </select>
+          <label for="player-limit">Spelarplatser</label>
+          <select id="player-limit">
+            <option value="2">2 spelare</option>
+            <option value="3">3 spelare</option>
+            <option value="4">4 spelare</option>
+            <option value="5">5 spelare</option>
+            <option value="6">6 spelare</option>
+            <option value="7">7 spelare</option>
+            <option value="8">8 spelare</option>
+            <option value="9">9 spelare</option>
+            <option value="10">10 spelare</option>
+            <option value="11">11 spelare</option>
+            <option value="12" selected>12 spelare</option>
+          </select>
+          <label for="soft-block-percentage">Lådor: <output id="soft-block-value">2.3%</output></label>
+          <input id="soft-block-percentage" type="range" min="0" max="100" step="0.1" value="2.3">
+          <small class="form-hint">Antalet räknas från spelbara rutor efter att startzoner reserverats.</small>
           <button type="submit">Skapa spelrum</button>
         </form>
         <form id="join-form">
@@ -36,7 +57,7 @@
           <button id="leave-button" class="secondary">Lämna rum</button>
         </div>
         <canvas id="arena" aria-label="Spelplan"></canvas>
-        <p class="controls">Rörelse: piltangenter eller WASD · Placera Tesla coil: mellanslag · Med Kick: gå in i en coil för att sparka den</p>
+        <p class="controls">Rörelse: piltangenter eller WASD · Placera Tesla coil direkt från start: mellanslag · Med Kick: gå in i en coil för att sparka den</p>
         <ul id="players"></ul>
       </section>
     </main>

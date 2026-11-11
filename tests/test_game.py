@@ -42,6 +42,45 @@ def test_arena_has_exact_requested_number_of_safe_soft_blocks(block_count: int) 
     )
 
 
+@pytest.mark.parametrize(
+    ("size", "player_limit", "percentage"),
+    [(25, 2, 0), (25, 8, 10), (35, 12, 2.3), (45, 6, 25), (45, 12, 100)],
+)
+def test_arena_block_percentage_uses_available_tiles_after_spawn_safety(
+    size: int, player_limit: int, percentage: float
+) -> None:
+    game = GameState.create(
+        width=size,
+        height=size,
+        player_limit=player_limit,
+        soft_block_percentage=percentage,
+    )
+    safe_positions = [
+        (x, y)
+        for y in range(2, size - 2)
+        for x in range(2, size - 2)
+        if (x, y) not in game.hard_walls
+        and all(
+            abs(x - spawn_x) + abs(y - spawn_y) > 2
+            for spawn_x, spawn_y in game.spawn_points()
+        )
+    ]
+    expected_count = int(len(safe_positions) * percentage / 100 + 0.5)
+
+    assert (game.width, game.height) == (size, size)
+    assert game.player_limit == player_limit
+    assert game.soft_block_percentage == percentage
+    assert len(game.soft_blocks) == expected_count
+
+
+@pytest.mark.parametrize("percentage", [-0.1, 100.1])
+def test_arena_rejects_block_percentages_outside_supported_range(
+    percentage: float,
+) -> None:
+    with pytest.raises(GameError, match="percentage must be between 0 and 100"):
+        GameState.create(soft_block_percentage=percentage)
+
+
 @pytest.mark.parametrize("block_count", [-1, 201])
 def test_arena_rejects_soft_block_counts_outside_supported_range(
     block_count: int,

@@ -8,7 +8,7 @@ from starlette.websockets import WebSocket
 
 from tesla_arena.game import (
     DEFAULT_ARENA_SIZE,
-    DEFAULT_SOFT_BLOCK_COUNT,
+    DEFAULT_SOFT_BLOCK_PERCENTAGE,
     MAX_PLAYERS,
     GameError,
     GameState,
@@ -29,7 +29,10 @@ class Room:
             "id": self.id,
             "players": len(self.game.players),
             "max_players": self.game.player_limit,
+            "width": self.game.width,
+            "height": self.game.height,
             "soft_block_count": self.game.soft_block_count,
+            "soft_block_percentage": self.game.soft_block_percentage,
         }
 
 
@@ -40,7 +43,11 @@ class RoomManager:
     def create_room(
         self,
         private: bool,
-        soft_block_count: int = DEFAULT_SOFT_BLOCK_COUNT,
+        soft_block_count: int | None = None,
+        *,
+        arena_size: int = DEFAULT_ARENA_SIZE,
+        player_limit: int = MAX_PLAYERS,
+        soft_block_percentage: float = DEFAULT_SOFT_BLOCK_PERCENTAGE,
     ) -> tuple[Room, str | None]:
         room_id = secrets.token_hex(3).upper()
         while room_id in self.rooms:
@@ -51,10 +58,13 @@ class RoomManager:
             private=private,
             invite_code=invite_code,
             game=GameState.create(
-                width=DEFAULT_ARENA_SIZE,
-                height=DEFAULT_ARENA_SIZE,
-                player_limit=MAX_PLAYERS,
+                width=arena_size,
+                height=arena_size,
+                player_limit=player_limit,
                 soft_block_count=soft_block_count,
+                soft_block_percentage=(
+                    None if soft_block_count is not None else soft_block_percentage
+                ),
             ),
         )
         self.rooms[room.id] = room

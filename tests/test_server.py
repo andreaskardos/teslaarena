@@ -15,6 +15,7 @@ def test_lobby_and_private_room_http_flow() -> None:
     private_room = created.json()
     assert private_room["max_players"] == 12
     assert private_room["soft_block_count"] == 16
+    assert private_room["arena_size"] == 35
     assert private_room["room_id"] not in {
         room["id"] for room in client.get("/api/rooms").json()
     }
@@ -49,12 +50,60 @@ def test_room_creation_accepts_custom_soft_block_count() -> None:
     assert rooms.rooms[room_id].game.snapshot()["soft_blocks_remaining"] == 75
 
 
+def test_room_creation_accepts_size_player_count_and_block_percentage() -> None:
+    rooms.rooms.clear()
+    client = TestClient(app)
+
+    created = client.post(
+        "/api/rooms",
+        json={
+            "private": False,
+            "arena_size": 45,
+            "player_limit": 8,
+            "soft_block_percentage": 25,
+        },
+    )
+
+    assert created.status_code == 200
+    room_id = created.json()["room_id"]
+    room = rooms.rooms[room_id]
+    assert created.json()["arena_size"] == 45
+    assert created.json()["max_players"] == 8
+    assert created.json()["soft_block_percentage"] == 25
+    assert room.game.width == room.game.height == 45
+    assert room.game.player_limit == 8
+    assert len(room.game.soft_blocks) == int(
+        sum(
+            (x, y) not in room.game.hard_walls
+            and all(
+                abs(x - spawn_x) + abs(y - spawn_y) > 2
+                for spawn_x, spawn_y in room.game.spawn_points()
+            )
+            for y in range(2, 43)
+            for x in range(2, 43)
+        )
+        * 0.25
+        + 0.5
+    )
+
+
 def test_room_creation_rejects_soft_block_count_above_limit() -> None:
     client = TestClient(app)
 
     response = client.post(
         "/api/rooms",
         json={"private": False, "soft_block_count": 201},
+    )
+
+    assert response.status_code == 422
+
+
+def test_room_creation_rejects_unsupported_arena_size() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/rooms",
+        json={"private": False, "arena_size": 30},
     )
 
     assert response.status_code == 422

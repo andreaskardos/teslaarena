@@ -26,7 +26,7 @@ async function refreshRooms() {
     list.replaceChildren();
     for (const room of rooms) {
       const item = document.createElement("li");
-      item.textContent = `${room.id} · ${room.players}/${room.max_players} spelare · ${room.soft_block_count} lådor`;
+      item.textContent = `${room.id} · ${room.players}/${room.max_players} spelare · ${room.width}×${room.height} · ${room.soft_block_count} lådor (${room.soft_block_percentage.toFixed(1)}%)`;
       list.append(item);
     }
     if (!rooms.length) {
@@ -54,6 +54,8 @@ async function joinRoom(roomId, inviteCode, name) {
     const message = JSON.parse(event.data);
     if (message.type === "state") {
       gameState = message.state;
+      document.querySelector("#room-meta").textContent =
+        `${gameState.width}×${gameState.height} · ${gameState.player_limit} spelarplatser · ${gameState.soft_block_count} lådor · coils kan placeras direkt`;
       render();
     } else if (message.type === "error") {
       status.textContent = message.message;
@@ -62,6 +64,11 @@ async function joinRoom(roomId, inviteCode, name) {
   socket.addEventListener("close", () => { status.textContent = "Anslutningen till spelet stängdes."; });
 }
 
+const softBlockPercentage = document.querySelector("#soft-block-percentage");
+softBlockPercentage.addEventListener("input", () => {
+  document.querySelector("#soft-block-value").value = `${Number(softBlockPercentage.value).toFixed(1)}%`;
+});
+
 document.querySelector("#create-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
@@ -69,7 +76,9 @@ document.querySelector("#create-form").addEventListener("submit", async (event) 
       method: "POST",
       body: JSON.stringify({
         private: document.querySelector("#private-room").checked,
-        soft_block_count: Number(document.querySelector("#soft-block-count").value),
+        arena_size: Number(document.querySelector("#arena-size").value),
+        player_limit: Number(document.querySelector("#player-limit").value),
+        soft_block_percentage: Number(softBlockPercentage.value),
       }),
     });
     document.querySelector("#room-id").value = room.room_id;

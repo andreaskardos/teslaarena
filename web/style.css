@@ -25,6 +25,10 @@ form { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bo
 input, button { min-height: 42px; border-radius: 9px; font: inherit; }
 input { width: 180px; padding: 0 12px; color: #edf2ff; background: #101827; border: 1px solid #35445e; }
 input[type="checkbox"] { width: auto; min-height: auto; accent-color: #42d4ff; }
+input[type="range"] { width: min(240px, 100%); padding: 0; accent-color: #55d9ff; }
+select { min-height: 42px; padding: 0 12px; color: #edf2ff; background: #101827; border: 1px solid #35445e; border-radius: 9px; font: inherit; }
+output { color: #55d9ff; font-weight: 800; }
+.form-hint { flex-basis: 100%; color: #aab8d2; }
 button { padding: 0 16px; border: 0; color: #06121d; font-weight: 800; background: #55d9ff; cursor: pointer; }
 button:hover { background: #8be6ff; }
 button.secondary { color: #d7e1f4; background: #2b3a56; }

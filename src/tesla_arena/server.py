@@ -11,15 +11,23 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from tesla_arena.game import DEFAULT_SOFT_BLOCK_COUNT, MAX_SOFT_BLOCK_COUNT, GameError
+from tesla_arena.game import (
+    DEFAULT_ARENA_SIZE,
+    DEFAULT_SOFT_BLOCK_PERCENTAGE,
+    MAX_PLAYERS,
+    GameError,
+)
 from tesla_arena.rooms import Room, RoomManager
 
 
 class CreateRoomRequest(BaseModel):
     private: bool = False
-    soft_block_count: int = Field(
-        default=DEFAULT_SOFT_BLOCK_COUNT, ge=0, le=MAX_SOFT_BLOCK_COUNT
+    arena_size: Literal[25, 35, 45] = DEFAULT_ARENA_SIZE
+    player_limit: int = Field(default=MAX_PLAYERS, ge=2, le=MAX_PLAYERS)
+    soft_block_percentage: float = Field(
+        default=DEFAULT_SOFT_BLOCK_PERCENTAGE, ge=0, le=100
     )
+    soft_block_count: int | None = Field(default=None, ge=0, le=200)
 
 
 class JoinRoomRequest(BaseModel):
@@ -55,13 +63,22 @@ async def list_rooms() -> list[dict[str, object]]:
 
 @app.post("/api/rooms")
 async def create_room(request: CreateRoomRequest) -> dict[str, object]:
-    room, invite_code = rooms.create_room(
-        request.private, request.soft_block_count
-    )
+    try:
+        room, invite_code = rooms.create_room(
+            request.private,
+            request.soft_block_count,
+            arena_size=request.arena_size,
+            player_limit=request.player_limit,
+            soft_block_percentage=request.soft_block_percentage,
+        )
+    except GameError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
     result: dict[str, object] = {
         "room_id": room.id,
         "max_players": room.game.player_limit,
+        "arena_size": room.game.width,
         "soft_block_count": room.game.soft_block_count,
+        "soft_block_percentage": room.game.soft_block_percentage,
     }
     if invite_code is not None:
         result["invite_code"] = invite_code

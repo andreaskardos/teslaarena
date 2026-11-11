@@ -11,6 +11,7 @@ Position: TypeAlias = tuple[int, int]
 MAX_PLAYERS = 12
 DEFAULT_ARENA_SIZE = 35
 DEFAULT_SOFT_BLOCK_COUNT = 16
+DEFAULT_SOFT_BLOCK_PERCENTAGE = 2.3
 MAX_SOFT_BLOCK_COUNT = 200
 COIL_FUSE_SECONDS = 2.5
 COIL_RANGE = 2
@@ -80,6 +81,7 @@ class GameState:
     height: int
     player_limit: int
     soft_block_count: int = DEFAULT_SOFT_BLOCK_COUNT
+    soft_block_percentage: float = DEFAULT_SOFT_BLOCK_PERCENTAGE
     hard_walls: set[Position] = field(default_factory=set)
     soft_blocks: set[Position] = field(default_factory=set)
     powerups: dict[Position, str] = field(default_factory=dict)
@@ -97,11 +99,16 @@ class GameState:
         height: int = DEFAULT_ARENA_SIZE,
         player_limit: int = MAX_PLAYERS,
         soft_block_count: int | None = None,
+        soft_block_percentage: float | None = None,
     ) -> GameState:
         if width < 7 or height < 7:
             raise GameError("Arena dimensions must be at least 7 by 7.")
         if not 2 <= player_limit <= MAX_PLAYERS:
             raise GameError(f"Player limit must be between 2 and {MAX_PLAYERS}.")
+        if soft_block_count is not None and soft_block_percentage is not None:
+            raise GameError(
+                "Choose either a soft block count or a soft block percentage."
+            )
         if (
             soft_block_count is not None
             and not 0 <= soft_block_count <= MAX_SOFT_BLOCK_COUNT
@@ -109,6 +116,8 @@ class GameState:
             raise GameError(
                 f"Soft block count must be between 0 and {MAX_SOFT_BLOCK_COUNT}."
             )
+        if soft_block_percentage is not None and not 0 <= soft_block_percentage <= 100:
+            raise GameError("Soft block percentage must be between 0 and 100.")
 
         arena = cls(width, height, player_limit)
         spawn_points = arena.spawn_points()
@@ -135,9 +144,26 @@ class GameState:
             if x % 2 == 1 and y % 2 == 1 and (x * 17 + y * 31) % 13 == 0
         ]
         if soft_block_count is None:
-            soft_block_count = min(DEFAULT_SOFT_BLOCK_COUNT, len(safe_positions))
+            if soft_block_percentage is None:
+                soft_block_count = min(DEFAULT_SOFT_BLOCK_COUNT, len(safe_positions))
+            else:
+                soft_block_count = min(
+                    len(safe_positions),
+                    int(len(safe_positions) * soft_block_percentage / 100 + 0.5),
+                )
         arena.soft_block_count = soft_block_count
-        if soft_block_count <= len(original_layout):
+        arena.soft_block_percentage = (
+            soft_block_percentage
+            if soft_block_percentage is not None
+            else soft_block_count / len(safe_positions) * 100
+            if safe_positions
+            else 0
+        )
+        if soft_block_percentage is not None:
+            arena.soft_blocks = set(
+                arena._random.sample(safe_positions, soft_block_count)
+            )
+        elif soft_block_count <= len(original_layout):
             arena.soft_blocks = set(
                 arena._random.sample(original_layout, soft_block_count)
             )
@@ -368,6 +394,7 @@ class GameState:
             "height": self.height,
             "player_limit": self.player_limit,
             "soft_block_count": self.soft_block_count,
+            "soft_block_percentage": self.soft_block_percentage,
             "soft_blocks_remaining": len(self.soft_blocks),
             "hard_walls": [list(position) for position in sorted(self.hard_walls)],
             "soft_blocks": [list(position) for position in sorted(self.soft_blocks)],
