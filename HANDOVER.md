@@ -5,12 +5,13 @@ Updated: 2026-11-11
 ## Current state
 
 - Repository: `andreaskardos/kronsmash`, branch `master`.
-- Latest verified and pushed implementation commit: `1bace2a` — `Add host-started matches and remote control`.
-- The working tree was clean when this handover was prepared.
+- Use `git --no-pager log -5 --oneline` for the latest commit.
 - The game supports public/private rooms, arenas up to 45×45, up to 12 players, configurable crate density, Tesla coils and power-ups.
-- A room creator starts the match once at least two players have joined. Late arrivals can only spectate.
+- Each room runs one game loop (20 ticks per second) that sends state only when it changes.
+- The room creator starts the match. AI bots (easy, medium, hard) can be added in the lobby; a creator who starts alone gets three automatically. Late arrivals can only spectate.
+- Dropped players have 15 seconds to reconnect; the creator can start a rematch when a match ends; empty rooms are deleted.
 - Remote Control allows its owner to trigger their coils with **R** or the in-game button.
-- Last test run: **45 passed**. `node --check web\game.js` and `git diff --check` passed. There is one existing Starlette/AnyIO deprecation warning.
+- Last test run: **68 passed**. `node --check web\game.js` and `git diff --check` passed. There is one existing Starlette/AnyIO deprecation warning.
 
 ## Resume after restarting the PC
 
@@ -68,10 +69,15 @@ state is in memory, so rooms are lost when the server stops.
 
 ## Recommended next work
 
-The next roadmap item is a real multi-browser playtest. Verify public and
-private rooms, creator-only start, late-join spectators, a full 12-player room,
-movement and Tesla-coil combat, Remote Control, and the winner display. Record
-any issues as regression tests before changing game behavior.
+The next roadmap item is a real multi-browser playtest. Bots make it possible
+to play a full match alone. Verify public and private rooms, adding and
+removing bots, creator-only start, late-join spectators, a full 12-player room,
+movement and Tesla-coil combat, Remote Control, the winner display, rematches,
+and reloading the page or closing a tab mid-match. Record any issues as
+regression tests before changing game behavior.
+
+After that: limits on room creation and incoming game actions (roadmap
+stage 2).
 
 See [ROADMAP.md](ROADMAP.md) for the broader roadmap and [README.md](README.md)
 for setup and gameplay rules.

@@ -15,6 +15,8 @@
 - [x] Single-room game loop that ticks matches and broadcasts only state changes.
 - [x] AI bots (easy, medium, hard) when the creator starts alone.
 - [x] Creator can add and remove bots alongside human players in the lobby.
+- [x] Reconnect grace period, leaving, creator handover and empty-room cleanup.
+- [x] Rematch flow back to the lobby with a fresh arena.
 - [x] Spectator-only access for players joining after match start.
 - [x] Remote Control power-up and chain detonation.
 - [x] Choose the number of destructible blocks when creating a room.
@@ -36,9 +38,10 @@
 
 ### 2. Improve match and connection lifecycle
 
-- Handle disconnects, reconnects, and abandoned-room cleanup explicitly.
-- Add a rematch flow and a clear match-over state.
+- [x] Handle disconnects, reconnects, and abandoned-room cleanup explicitly.
+- [x] Add a rematch flow and a clear match-over state.
 - Add sensible limits for room creation and incoming game actions.
+- Let spectators take a free player slot when a rematch returns to the lobby.
 
 ### 3. Polish the battle experience
 

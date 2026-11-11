@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import secrets
 import time
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager, suppress
 from pathlib import Path
 from typing import Literal
 
@@ -43,12 +44,38 @@ class AddBotRequest(BaseModel):
 
 
 class GameAction(BaseModel):
-    type: Literal["move", "place_coil", "detonate_remote"]
+    type: Literal["move", "place_coil", "detonate_remote", "leave"]
     direction: Literal["up", "down", "left", "right"] | None = None
 
 
-app = FastAPI(title="Tesla Arena")
 rooms = RoomManager()
+logger = logging.getLogger(__name__)
+SWEEP_SECONDS = 1.0
+
+
+async def _sweep_rooms_forever() -> None:
+    """Expire reconnect grace periods and delete abandoned rooms."""
+    while True:
+        await asyncio.sleep(SWEEP_SECONDS)
+        try:
+            for room in rooms.sweep(time.monotonic()):
+                await _broadcast(room)
+        except Exception:  # noqa: BLE001 - keep sweeping after a bad room
+            logger.exception("Room sweep failed.")
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    sweeper = asyncio.create_task(_sweep_rooms_forever())
+    try:
+        yield
+    finally:
+        sweeper.cancel()
+        with suppress(asyncio.CancelledError):
+            await sweeper
+
+
+app = FastAPI(title="Tesla Arena", lifespan=lifespan)
 WEB_DIRECTORY = Path(__file__).resolve().parents[2] / "web"
 DIRECTIONS = {
     "up": (0, -1),
@@ -134,6 +161,16 @@ async def start_room(
     return {"phase": room.phase}
 
 
+@app.post("/api/rooms/{room_id}/rematch")
+async def rematch(
+    room_id: str, player_token: str = Header(alias="X-Player-Token")
+) -> dict[str, str]:
+    with _creator_errors():
+        room = rooms.rematch(room_id, player_token)
+    await _broadcast(room)
+    return {"phase": room.phase}
+
+
 @app.post("/api/rooms/{room_id}/bots")
 async def add_bot(
     room_id: str,
@@ -192,6 +229,7 @@ async def game_socket(websocket: WebSocket, room_id: str, player_id: str) -> Non
 
     await websocket.accept()
     room.connections[player_id] = websocket
+    rooms.member_connected(room, player_id)
     # The newcomer always gets the current state; others only if it changed.
     await websocket.send_text(_state_message(room))
     await _broadcast(room)
@@ -200,7 +238,11 @@ async def game_socket(websocket: WebSocket, room_id: str, player_id: str) -> Non
         while True:
             message = await websocket.receive_text()
             try:
-                _apply_action(room, player_id, is_spectator, message)
+                action = GameAction.model_validate_json(message)
+                if action.type == "leave":
+                    rooms.leave(room, player_id)
+                    break
+                _apply_action(room, player_id, is_spectator, action)
             except (ValueError, GameError) as error:
                 await websocket.send_json({"type": "error", "message": str(error)})
     except WebSocketDisconnect:
@@ -208,15 +250,20 @@ async def game_socket(websocket: WebSocket, room_id: str, player_id: str) -> Non
     finally:
         if room.connections.get(player_id) is websocket:
             del room.connections[player_id]
+            # Only the latest connection of a member starts a grace period.
+            rooms.member_disconnected(room, player_id, time.monotonic())
         if not room.connections:
             await _stop_room_loop(room)
+        else:
+            await _broadcast(room)
+    with suppress(Exception):
+        await websocket.close()
 
 
 def _apply_action(
-    room: Room, player_id: str, is_spectator: bool, message: str
+    room: Room, player_id: str, is_spectator: bool, action: GameAction
 ) -> None:
     """Apply one client action. The room loop ticks and broadcasts the result."""
-    action = GameAction.model_validate_json(message)
     if is_spectator:
         raise GameError("Spectators cannot control the match.")
     if not room.started:

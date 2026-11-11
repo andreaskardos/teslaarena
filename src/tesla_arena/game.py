@@ -42,6 +42,7 @@ class Player:
     has_remote: bool = False
     next_move_at: float = 0
     bot_skill: str | None = None
+    left: bool = False
 
     @property
     def alive(self) -> bool:
@@ -91,6 +92,7 @@ class GameState:
     players: dict[str, Player] = field(default_factory=dict)
     coils: dict[int, TeslaCoil] = field(default_factory=dict)
     lightning_effects: list[LightningEffect] = field(default_factory=list)
+    creation_options: dict[str, object] = field(default_factory=dict, repr=False)
     _random: Random = field(default_factory=Random, repr=False)
     _next_player_id: int = 1
     _next_coil_id: int = 1
@@ -123,6 +125,13 @@ class GameState:
             raise GameError("Soft block percentage must be between 0 and 100.")
 
         arena = cls(width, height, player_limit)
+        arena.creation_options = {
+            "width": width,
+            "height": height,
+            "player_limit": player_limit,
+            "soft_block_count": soft_block_count,
+            "soft_block_percentage": soft_block_percentage,
+        }
         spawn_points = arena.spawn_points()
         for y in range(height):
             for x in range(width):
@@ -206,21 +215,33 @@ class GameState:
         clean_name = name.strip()
         if not clean_name or len(clean_name) > 20:
             raise GameError("Player name must be between 1 and 20 characters.")
+        player = self._spawn_player(f"player-{self._next_player_id}", clean_name)
+        self._next_player_id += 1
+        return player
+
+    def _spawn_player(self, player_id: str, name: str) -> Player:
         occupied = {player.position for player in self.players.values()}
         spawn = next(
             (point for point in self.spawn_points() if point not in occupied), None
         )
         if spawn is None:
             raise GameError("No free spawn point is available.")
-        player = Player(
-            id=f"player-{self._next_player_id}",
-            name=clean_name,
-            x=spawn[0],
-            y=spawn[1],
-        )
-        self._next_player_id += 1
+        player = Player(id=player_id, name=name, x=spawn[0], y=spawn[1])
         self.players[player.id] = player
         return player
+
+    def rematch(self) -> GameState:
+        """A fresh arena with the same settings and the players who stayed.
+
+        Player ids are kept so existing tokens and connections stay valid.
+        """
+        fresh = GameState.create(**self.creation_options)  # type: ignore[arg-type]
+        for player in self.players.values():
+            if player.left:
+                continue
+            fresh._spawn_player(player.id, player.name).bot_skill = player.bot_skill
+        fresh._next_player_id = self._next_player_id
+        return fresh
 
     def remove_player(self, player_id: str) -> None:
         """Remove a player and their coils, freeing their spawn point."""
@@ -458,6 +479,7 @@ class GameState:
                     "has_speed_up": player.has_speed_up,
                     "has_remote": player.has_remote,
                     "bot_skill": player.bot_skill,
+                    "left": player.left,
                     "coil_slots": player.coil_capacity
                     - sum(
                         coil.owner_id == player.id for coil in self.coils.values()

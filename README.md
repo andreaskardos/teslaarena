@@ -91,3 +91,16 @@ For the development roadmap and steps to resume work in a new session, see
 Movement uses the arrow keys or WASD; Space places a coil, and R triggers
 Remote Control coils. Room state is held in memory and is lost when the server
 restarts.
+
+## Leaving, reconnecting and rematches
+
+- A player whose connection drops has 15 seconds to come back. The browser
+  reconnects automatically, also after a page reload in the same tab. After
+  that the player is removed from the lobby, or eliminated and shown as "left"
+  during a match.
+- **Lämna rum** leaves at once. If the creator leaves, the next human player
+  becomes the creator.
+- When a match is over, the creator can press **Spela igen**. The room returns
+  to its lobby with a new arena of the same size and density, keeping the
+  remaining players and bots, so bots can be adjusted before the next start.
+- Rooms without any players are deleted after 30 seconds.

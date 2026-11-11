@@ -39,62 +39,145 @@ async function refreshRooms() {
   }
 }
 
+const SESSION_KEY = "tesla-arena-session";
+const RECONNECT_DELAY_MS = 1000;
+let reconnectTimer;
+let previousPhase;
+
+// The session survives a page reload in this tab, so the player can rejoin
+// within the server's reconnect grace period.
+function saveSession() {
+  try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch { /* storage unavailable */ }
+}
+
+function loadSession() {
+  try { return JSON.parse(sessionStorage.getItem(SESSION_KEY)); } catch { return null; }
+}
+
+function clearSession() {
+  try { sessionStorage.removeItem(SESSION_KEY); } catch { /* storage unavailable */ }
+}
+
+function isCreator() {
+  return Boolean(session && gameState && gameState.creator_id === session.member_id);
+}
+
 async function joinRoom(roomId, inviteCode, name) {
   session = await request(`/api/rooms/${encodeURIComponent(roomId)}/join`, {
     method: "POST",
     body: JSON.stringify({ name, invite_code: inviteCode || null }),
   });
+  session.name = name;
+  saveSession();
+  enterRoom();
+}
+
+function enterRoom() {
   lastMoveSentAt = 0;
+  gameState = null;
+  previousPhase = null;
   lobby.classList.add("hidden");
   gamePanel.classList.remove("hidden");
   document.querySelector("#room-title").textContent = `Rum ${session.room_id}`;
   document.querySelector("#room-meta").textContent =
-    session.role === "spectator" ? `Du tittar på som ${name}.` : `Du spelar som ${name}.`;
-  document.querySelector("#start-button").classList.toggle("hidden", session.role !== "creator");
+    session.role === "spectator" ? `Du tittar på som ${session.name}.` : `Du spelar som ${session.name}.`;
+  for (const id of ["#start-button", "#rematch-button", "#bot-controls"]) {
+    document.querySelector(id).classList.add("hidden");
+  }
+  connect();
+}
+
+function connect() {
+  window.clearTimeout(reconnectTimer);
   const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-  socket = new WebSocket(`${protocol}//${location.host}${session.websocket_path}?token=${encodeURIComponent(session.token)}`);
-  socket.addEventListener("message", (event) => {
-    const message = JSON.parse(event.data);
-    if (message.type === "state") {
-      gameState = message.state;
-      const startButton = document.querySelector("#start-button");
-      const playingAlone = gameState.players.length === 1;
-      startButton.disabled = gameState.phase !== "lobby";
-      startButton.textContent = playingAlone ? "Starta mot botar" : "Starta match";
-      startButton.classList.toggle("hidden", session.role !== "creator" || gameState.phase !== "lobby");
-      document.querySelector("#bot-controls").classList.toggle("hidden", !canManageBots());
-      document.querySelector("#add-bot-button").disabled =
-        gameState.players.length >= gameState.player_limit;
-      const localPlayer = gameState.players.find((player) => player.id === session.member_id);
-      document.querySelector("#remote-button").classList.toggle(
-        "hidden",
-        session.role === "spectator"
-          || gameState.phase !== "playing"
-          || !localPlayer?.alive
-          || !localPlayer.has_remote,
-      );
-      const gameStatus = document.querySelector("#game-status");
-      if (gameState.phase === "lobby") {
-        gameStatus.textContent = session.role === "creator"
-          ? playingAlone
-            ? `Väntar på spelare (1/${gameState.player_limit}). Lägg till AI-botar, vänta på fler spelare eller starta ensam mot botar med olika svårighetsgrad.`
-            : `Väntar på spelare (${gameState.players.length}/${gameState.player_limit}). Du startar matchen.`
-          : `Väntar på att värden startar (${gameState.players.length}/${gameState.player_limit}).`;
-      } else if (session.role === "spectator") {
-        gameStatus.textContent = gameState.phase === "finished" ? "Matchen är avslutad." : "Du tittar på matchen som observatör.";
-      } else {
-        gameStatus.textContent = gameState.phase === "finished"
-          ? "Matchen är avslutad."
-          : `Matchen pågår${localPlayer?.alive ? "" : " · Du är utslagen och tittar nu som observatör"}.`;
-      }
-      document.querySelector("#room-meta").textContent =
-        `${gameState.width}×${gameState.height} · ${gameState.players.length}/${gameState.player_limit} spelare · ${gameState.spectator_count} observatörer · ${gameState.soft_block_count} lådor`;
-      render();
-    } else if (message.type === "error") {
-      status.textContent = message.message;
+  const ws = new WebSocket(`${protocol}//${location.host}${session.websocket_path}?token=${encodeURIComponent(session.token)}`);
+  socket = ws;
+  ws.addEventListener("open", () => {
+    if (status.dataset.reconnecting) {
+      delete status.dataset.reconnecting;
+      status.textContent = "Återansluten till rummet.";
     }
   });
-  socket.addEventListener("close", () => { status.textContent = "Anslutningen till spelet stängdes."; });
+  ws.addEventListener("message", (event) => handleMessage(JSON.parse(event.data)));
+  ws.addEventListener("close", (event) => {
+    // Ignore sockets that were replaced or closed because the player left.
+    if (socket !== ws || !session) return;
+    if (event.code === 1008) {
+      returnToLobby("Din plats i rummet finns inte längre kvar.");
+      return;
+    }
+    status.dataset.reconnecting = "true";
+    status.textContent = "Anslutningen bröts. Försöker återansluta…";
+    reconnectTimer = window.setTimeout(connect, RECONNECT_DELAY_MS);
+  });
+}
+
+function returnToLobby(message) {
+  window.clearTimeout(reconnectTimer);
+  const ws = socket;
+  socket = null;
+  session = null;
+  gameState = null;
+  clearSession();
+  ws?.close();
+  delete status.dataset.reconnecting;
+  status.textContent = message;
+  gamePanel.classList.add("hidden");
+  lobby.classList.remove("hidden");
+  refreshRooms();
+}
+
+function handleMessage(message) {
+  if (message.type === "error") {
+    status.textContent = message.message;
+    return;
+  }
+  if (message.type !== "state") return;
+  gameState = message.state;
+  const creator = isCreator();
+  const phase = gameState.phase;
+  if (previousPhase === "finished" && phase === "lobby") {
+    status.textContent = "Ny runda! Väntar på att värden startar.";
+  }
+  previousPhase = phase;
+
+  const startButton = document.querySelector("#start-button");
+  const playingAlone = gameState.players.length === 1;
+  startButton.disabled = phase !== "lobby";
+  startButton.textContent = playingAlone ? "Starta mot botar" : "Starta match";
+  startButton.classList.toggle("hidden", !creator || phase !== "lobby");
+  document.querySelector("#rematch-button").classList.toggle("hidden", !creator || phase !== "finished");
+  document.querySelector("#bot-controls").classList.toggle("hidden", !canManageBots());
+  document.querySelector("#add-bot-button").disabled =
+    gameState.players.length >= gameState.player_limit;
+  const localPlayer = gameState.players.find((player) => player.id === session.member_id);
+  document.querySelector("#remote-button").classList.toggle(
+    "hidden",
+    session.role === "spectator"
+      || phase !== "playing"
+      || !localPlayer?.alive
+      || !localPlayer.has_remote,
+  );
+  const gameStatus = document.querySelector("#game-status");
+  if (phase === "lobby") {
+    gameStatus.textContent = creator
+      ? playingAlone
+        ? `Väntar på spelare (1/${gameState.player_limit}). Lägg till AI-botar, vänta på fler spelare eller starta ensam mot botar med olika svårighetsgrad.`
+        : `Väntar på spelare (${gameState.players.length}/${gameState.player_limit}). Du startar matchen.`
+      : `Väntar på att värden startar (${gameState.players.length}/${gameState.player_limit}).`;
+  } else if (phase === "finished") {
+    gameStatus.textContent = creator
+      ? "Matchen är avslutad. Tryck på Spela igen för en ny runda."
+      : "Matchen är avslutad. Väntar på att värden startar en ny runda.";
+  } else if (session.role === "spectator") {
+    gameStatus.textContent = "Du tittar på matchen som observatör.";
+  } else {
+    gameStatus.textContent =
+      `Matchen pågår${localPlayer?.alive ? "" : " · Du är utslagen och tittar nu som observatör"}.`;
+  }
+  document.querySelector("#room-meta").textContent =
+    `${gameState.width}×${gameState.height} · ${gameState.players.length}/${gameState.player_limit} spelare · ${gameState.spectator_count} observatörer · ${gameState.soft_block_count} lådor`;
+  render();
 }
 
 const softBlockPercentage = document.querySelector("#soft-block-percentage");
@@ -114,7 +197,7 @@ document.querySelector("#start-button").addEventListener("click", async () => {
 });
 
 function canManageBots() {
-  return session?.role === "creator" && gameState?.phase === "lobby";
+  return isCreator() && gameState?.phase === "lobby";
 }
 
 async function creatorRequest(path, options) {
@@ -133,6 +216,10 @@ document.querySelector("#add-bot-button").addEventListener("click", () => {
     method: "POST",
     body: JSON.stringify({ skill: document.querySelector("#bot-skill").value }),
   });
+});
+
+document.querySelector("#rematch-button").addEventListener("click", () => {
+  creatorRequest(`/api/rooms/${encodeURIComponent(session.room_id)}/rematch`, { method: "POST" });
 });
 
 document.querySelector("#remote-button").addEventListener("click", () => {
@@ -178,12 +265,10 @@ document.querySelector("#join-form").addEventListener("submit", async (event) =>
 });
 
 document.querySelector("#leave-button").addEventListener("click", () => {
-  socket?.close();
-  session = null;
-  gameState = null;
-  gamePanel.classList.add("hidden");
-  lobby.classList.remove("hidden");
-  refreshRooms();
+  if (socket?.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify({ type: "leave" }));
+  }
+  returnToLobby("Du lämnade rummet.");
 });
 
 const directions = {
@@ -262,7 +347,8 @@ function render() {
       ...(player.has_speed_up ? ["Speed Up"] : []),
       ...(player.has_remote ? ["Remote Control"] : []),
     ].join(" · ");
-    item.textContent = `${player.bot_skill ? "🤖 " : ""}${player.name} · ${player.alive ? abilities : "ute"}`;
+    const playerStatus = player.left ? "lämnade" : player.alive ? abilities : "ute";
+    item.textContent = `${player.bot_skill ? "🤖 " : ""}${player.name} · ${playerStatus}`;
     if (!player.alive) item.style.color = "#78869e";
     if (player.bot_skill && canManageBots()) {
       const remove = document.createElement("button");
@@ -398,5 +484,11 @@ function cellCenter(x, y, size) {
   return { x: x * size + size / 2, y: y * size + size / 2 };
 }
 
+const savedSession = loadSession();
+if (savedSession) {
+  session = savedSession;
+  status.textContent = "Återansluter till ditt rum…";
+  enterRoom();
+}
 refreshRooms();
 window.setInterval(refreshRooms, 5000);
