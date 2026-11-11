@@ -7,13 +7,14 @@ from hmac import compare_digest
 
 from starlette.websockets import WebSocket
 
-from tesla_arena.bots import BOT_LINEUP, BOT_SKILLS, Bot, bot_name
+from tesla_arena.bots import BOT_LINEUP, BOT_SKILLS, Bot, bot_name, next_bot_name
 from tesla_arena.game import (
     DEFAULT_ARENA_SIZE,
     DEFAULT_SOFT_BLOCK_PERCENTAGE,
     MAX_PLAYERS,
     GameError,
     GameState,
+    Player,
 )
 
 
@@ -122,33 +123,59 @@ class RoomManager:
         return room, player.id, token, role
 
     def start_room(self, room_id: str, player_id: str, token: str) -> Room:
-        room = self.rooms.get(room_id.upper())
-        if room is None:
-            raise GameError("Room not found.")
-        stored_token = room.player_tokens.get(player_id)
-        if (
-            stored_token is None
-            or not compare_digest(stored_token, token)
-            or player_id != room.creator_id
-        ):
+        room = self._room_for_creator(room_id, token, "start the match")
+        if player_id != room.creator_id:
             raise PermissionError("Only the room creator can start the match.")
-        if room.started:
-            raise GameError("The match has already started.")
         if len(room.game.players) == 1:
-            self._add_bots(room)
+            self._add_lineup(room)
         room.started = True
         return room
 
-    def _add_bots(self, room: Room) -> None:
+    def add_bot(self, room_id: str, token: str, skill_key: str) -> Player:
+        """Add a bot of the given skill to a room that is still in its lobby."""
+        room = self._room_for_creator(room_id, token, "add bots")
+        if skill_key not in BOT_SKILLS:
+            raise GameError(f"Unknown bot skill: {skill_key}.")
+        names_in_use = {
+            room.game.players[bot_id].name.split(" (")[0] for bot_id in room.bots
+        }
+        return self._create_bot(room, next_bot_name(names_in_use), skill_key)
+
+    def remove_bot(self, room_id: str, token: str, bot_id: str) -> None:
+        room = self._room_for_creator(room_id, token, "remove bots")
+        if bot_id not in room.bots:
+            raise GameError("Bot not found.")
+        room.game.remove_player(bot_id)
+        del room.bots[bot_id]
+
+    def _room_for_creator(self, room_id: str, token: str, action: str) -> Room:
+        """Return a lobby-phase room after checking ``token`` is the creator's."""
+        room = self.rooms.get(room_id.upper())
+        if room is None:
+            raise GameError("Room not found.")
+        stored_token = (
+            room.player_tokens.get(room.creator_id) if room.creator_id else None
+        )
+        if stored_token is None or not compare_digest(stored_token, token):
+            raise PermissionError(f"Only the room creator can {action}.")
+        if room.started:
+            raise GameError("The match has already started.")
+        return room
+
+    def _add_lineup(self, room: Room) -> None:
         """Give a lone creator up to three opponents of increasing skill."""
         free_slots = room.game.player_limit - len(room.game.players)
         # Small rooms keep the skills spread out rather than all hard bots.
         picks = {1: (1,), 2: (0, 2)}.get(free_slots, range(len(BOT_LINEUP)))
         for name, skill_key in (BOT_LINEUP[index] for index in picks):
-            skill = BOT_SKILLS[skill_key]
-            player = room.game.join_player(bot_name(name, skill))
-            player.bot_skill = skill.key
-            room.bots[player.id] = Bot(player.id, skill)
+            self._create_bot(room, name, skill_key)
+
+    def _create_bot(self, room: Room, name: str, skill_key: str) -> Player:
+        skill = BOT_SKILLS[skill_key]
+        player = room.game.join_player(bot_name(name, skill))
+        player.bot_skill = skill.key
+        room.bots[player.id] = Bot(player.id, skill)
+        return player
 
     def public_rooms(self) -> list[dict[str, object]]:
         return [

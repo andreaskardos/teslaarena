@@ -222,6 +222,16 @@ class GameState:
         self.players[player.id] = player
         return player
 
+    def remove_player(self, player_id: str) -> None:
+        """Remove a player and their coils, freeing their spawn point."""
+        if self.players.pop(player_id, None) is None:
+            raise GameError("Player not found.")
+        self.coils = {
+            coil_id: coil
+            for coil_id, coil in self.coils.items()
+            if coil.owner_id != player_id
+        }
+
     def move(
         self, player_id: str, dx: int, dy: int, now: float | None = None
     ) -> Position:

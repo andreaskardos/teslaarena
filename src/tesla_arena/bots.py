@@ -93,8 +93,32 @@ BOT_LINEUP: tuple[tuple[str, str], ...] = (
 )
 
 
+# Names for bots the room creator adds by hand, used in this order.
+BOT_NAMES: tuple[str, ...] = (
+    "Volt",
+    "Ampere",
+    "Tesla",
+    "Ohm",
+    "Watt",
+    "Faraday",
+    "Joule",
+    "Gauss",
+    "Kelvin",
+    "Hertz",
+    "Coulomb",
+)
+
+
 def bot_name(name: str, skill: BotSkill) -> str:
     return f"{name} ({skill.label})"
+
+
+def next_bot_name(names_in_use: set[str]) -> str:
+    """First name from ``BOT_NAMES`` that no bot in the room uses yet."""
+    for name in BOT_NAMES:
+        if name not in names_in_use:
+            return name
+    return f"Bot {len(names_in_use) + 1}"
 
 
 @dataclass

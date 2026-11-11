@@ -76,8 +76,10 @@ For the development roadmap and steps to resume work in a new session, see
 - The room creator starts the match. Game actions are disabled in the lobby;
   anyone joining after the match starts is an observer and cannot control a
   player.
-- A creator who starts alone plays against AI bots: Volt (easy), Ampere
-  (medium) and Tesla (hard), limited by the free player slots. Easy bots react
+- Before the match, the creator can add AI bots of any skill (easy, medium or
+  hard) alongside human players, or remove them again. Bots take player slots.
+- A creator who starts alone without adding bots plays against Volt (easy),
+  Ampere (medium) and Tesla (hard), limited by the free player slots. Easy bots react
   slowly and sometimes misjudge their own coils; hard bots react quickly,
   foresee chain reactions and hunt other players.
 - Remote Control can drop from destroyed blocks. New coils belonging to its

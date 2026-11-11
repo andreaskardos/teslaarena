@@ -290,3 +290,45 @@ def test_lone_creator_starts_against_bots_that_play() -> None:
                     )
                 ),
             )
+
+
+def test_creator_manages_bots_over_http() -> None:
+    rooms.rooms.clear()
+    client = TestClient(app)
+    room = client.post("/api/rooms", json={"private": False}).json()
+    room_id = room["room_id"]
+    host = client.post(f"/api/rooms/{room_id}/join", json={"name": "Host"}).json()
+    guest = client.post(f"/api/rooms/{room_id}/join", json={"name": "Guest"}).json()
+
+    def add(token: str, skill: str = "medium"):
+        return client.post(
+            f"/api/rooms/{room_id}/bots",
+            json={"skill": skill},
+            headers={"X-Player-Token": token},
+        )
+
+    assert add(guest["token"]).status_code == 403
+    assert add(host["token"], "genius").status_code == 422
+    added = add(host["token"], "hard")
+    assert added.status_code == 200
+    assert added.json()["name"] == "Volt (svår)"
+    bot_id = added.json()["bot_id"]
+    assert rooms.rooms[room_id].game.players[bot_id].bot_skill == "hard"
+
+    removed = client.delete(
+        f"/api/rooms/{room_id}/bots/{bot_id}",
+        headers={"X-Player-Token": host["token"]},
+    )
+    assert removed.json() == {"removed": bot_id}
+    missing = client.delete(
+        f"/api/rooms/{room_id}/bots/{bot_id}",
+        headers={"X-Player-Token": host["token"]},
+    )
+    assert missing.status_code == 404
+
+    add(host["token"], "easy")
+    client.post(
+        f"/api/rooms/{room_id}/start", headers={"X-Player-Token": host["token"]}
+    )
+    assert add(host["token"]).status_code == 409
+    assert len(rooms.rooms[room_id].game.players) == 3

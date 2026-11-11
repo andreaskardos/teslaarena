@@ -39,6 +39,8 @@ button.secondary { color: #d7e1f4; background: #2b3a56; }
 .game-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 #arena { display: block; width: min(100%, 700px); height: auto; margin: 12px auto; image-rendering: pixelated; border: 2px solid #374862; border-radius: 8px; }
 .controls { text-align: center; }
+.bot-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; margin-top: 12px; }
+.remove-bot { min-height: 28px; margin-left: 8px; padding: 0 10px; font-size: 0.85em; }
 
 @media (max-width: 600px) {
   main { padding-top: 20px; }

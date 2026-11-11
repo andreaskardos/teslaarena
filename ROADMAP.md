@@ -14,6 +14,7 @@
 - [x] Creator-controlled match start.
 - [x] Single-room game loop that ticks matches and broadcasts only state changes.
 - [x] AI bots (easy, medium, hard) when the creator starts alone.
+- [x] Creator can add and remove bots alongside human players in the lobby.
 - [x] Spectator-only access for players joining after match start.
 - [x] Remote Control power-up and chain detonation.
 - [x] Choose the number of destructible blocks when creating a room.

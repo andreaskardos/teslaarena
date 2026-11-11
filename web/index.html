@@ -60,6 +60,15 @@
             <button id="leave-button" class="secondary">Lämna rum</button>
           </div>
         </div>
+        <div id="bot-controls" class="bot-controls hidden">
+          <label for="bot-skill">AI-bot</label>
+          <select id="bot-skill">
+            <option value="easy">Lätt</option>
+            <option value="medium" selected>Medel</option>
+            <option value="hard">Svår</option>
+          </select>
+          <button id="add-bot-button" class="secondary" type="button">Lägg till bot</button>
+        </div>
         <canvas id="arena" aria-label="Spelplan"></canvas>
         <p id="game-status" class="controls"></p>
         <p class="controls">Rörelse: piltangenter eller WASD · Placera Tesla coil: mellanslag · Med Kick: gå in i en coil för att sparka den · Remote Control: R</p>

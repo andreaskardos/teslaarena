@@ -3,7 +3,7 @@ import random
 import pytest
 
 from tesla_arena.bots import BOT_SKILLS, Bot, danger_map
-from tesla_arena.game import GameState
+from tesla_arena.game import GameError, GameState
 from tesla_arena.rooms import RoomManager
 
 
@@ -111,3 +111,47 @@ def test_bots_only_match_makes_progress() -> None:
 
     eliminated = sum(not player.alive for player in game.players.values())
     assert len(game.soft_blocks) < blocks_at_start - 10 or eliminated
+
+
+def test_creator_can_add_bots_alongside_human_players() -> None:
+    manager = RoomManager()
+    room, _ = manager.create_room(private=False, player_limit=4)
+    _, host_id, host_token, _ = manager.join_room(room.id, "Host", None)
+    _, _, guest_token, _ = manager.join_room(room.id, "Guest", None)
+
+    with pytest.raises(PermissionError, match="room creator"):
+        manager.add_bot(room.id, guest_token, "easy")
+    hard = manager.add_bot(room.id, host_token, "hard")
+    manager.add_bot(room.id, host_token, "hard")
+    with pytest.raises(GameError, match="full"):
+        manager.add_bot(room.id, host_token, "easy")
+
+    assert [room.game.players[bot_id].name for bot_id in room.bots] == [
+        "Volt (svår)",
+        "Ampere (svår)",
+    ]
+    manager.remove_bot(room.id, host_token, hard.id)
+    assert hard.id not in room.game.players
+    with pytest.raises(GameError, match="not found"):
+        manager.remove_bot(room.id, host_token, host_id)
+
+    # The freed slot (and its spawn point) can go to a human.
+    _, late_id, _, role = manager.join_room(room.id, "Late", None)
+    assert role == "player"
+    manager.start_room(room.id, host_id, host_token)
+    assert len(room.bots) == 1, "no extra bots when others have joined"
+    with pytest.raises(GameError, match="already started"):
+        manager.add_bot(room.id, host_token, "easy")
+    spawns = [player.position for player in room.game.players.values()]
+    assert len(set(spawns)) == len(spawns)
+
+
+def test_lone_creator_with_chosen_bots_gets_no_automatic_lineup() -> None:
+    manager = RoomManager()
+    room, _ = manager.create_room(private=False)
+    _, host_id, host_token, _ = manager.join_room(room.id, "Host", None)
+    manager.add_bot(room.id, host_token, "easy")
+
+    manager.start_room(room.id, host_id, host_token)
+
+    assert [p.bot_skill for p in room.game.players.values()] == [None, "easy"]

@@ -4,6 +4,8 @@ import asyncio
 import json
 import secrets
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Literal
 
@@ -34,6 +36,10 @@ class CreateRoomRequest(BaseModel):
 class JoinRoomRequest(BaseModel):
     name: str = Field(min_length=1, max_length=20)
     invite_code: str | None = None
+
+
+class AddBotRequest(BaseModel):
+    skill: Literal["easy", "medium", "hard"] = "medium"
 
 
 class GameAction(BaseModel):
@@ -126,6 +132,42 @@ async def start_room(
         raise HTTPException(status_code=409, detail=str(error)) from error
     await _broadcast(room)
     return {"phase": room.phase}
+
+
+@app.post("/api/rooms/{room_id}/bots")
+async def add_bot(
+    room_id: str,
+    request: AddBotRequest,
+    player_token: str = Header(alias="X-Player-Token"),
+) -> dict[str, str]:
+    with _creator_errors():
+        bot = rooms.add_bot(room_id, player_token, request.skill)
+    await _broadcast(rooms.rooms[room_id.upper()])
+    return {"bot_id": bot.id, "name": bot.name, "skill": request.skill}
+
+
+@app.delete("/api/rooms/{room_id}/bots/{bot_id}")
+async def remove_bot(
+    room_id: str,
+    bot_id: str,
+    player_token: str = Header(alias="X-Player-Token"),
+) -> dict[str, str]:
+    with _creator_errors():
+        rooms.remove_bot(room_id, player_token, bot_id)
+    await _broadcast(rooms.rooms[room_id.upper()])
+    return {"removed": bot_id}
+
+
+@contextmanager
+def _creator_errors() -> Iterator[None]:
+    """Translate room-manager errors for creator-only lobby actions to HTTP."""
+    try:
+        yield
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except GameError as error:
+        status = 404 if "not found" in str(error).lower() else 409
+        raise HTTPException(status_code=status, detail=str(error)) from error
 
 
 @app.websocket("/ws/{room_id}/{player_id}")
