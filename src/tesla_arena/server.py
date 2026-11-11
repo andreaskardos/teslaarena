@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -36,7 +36,7 @@ class JoinRoomRequest(BaseModel):
 
 
 class GameAction(BaseModel):
-    type: Literal["move", "place_coil"]
+    type: Literal["move", "place_coil", "detonate_remote"]
     direction: Literal["up", "down", "left", "right"] | None = None
 
 
@@ -88,7 +88,7 @@ async def create_room(request: CreateRoomRequest) -> dict[str, object]:
 @app.post("/api/rooms/{room_id}/join")
 async def join_room(room_id: str, request: JoinRoomRequest) -> dict[str, str]:
     try:
-        room, player_id, token = rooms.join_room(
+        room, member_id, token, role = rooms.join_room(
             room_id, request.name, request.invite_code
         )
     except PermissionError as error:
@@ -98,17 +98,46 @@ async def join_room(room_id: str, request: JoinRoomRequest) -> dict[str, str]:
         raise HTTPException(status_code=status, detail=str(error)) from error
     return {
         "room_id": room.id,
-        "player_id": player_id,
+        "member_id": member_id,
+        "role": role,
         "token": token,
-        "websocket_path": f"/ws/{room.id}/{player_id}",
+        "websocket_path": f"/ws/{room.id}/{member_id}",
     }
+
+
+@app.post("/api/rooms/{room_id}/start")
+async def start_room(
+    room_id: str, player_token: str = Header(alias="X-Player-Token")
+) -> dict[str, str]:
+    room_id = room_id.upper()
+    room = rooms.rooms.get(room_id)
+    if room is None:
+        raise HTTPException(status_code=404, detail="Room not found.")
+    creator_id = room.creator_id
+    if creator_id is None:
+        raise HTTPException(status_code=409, detail="The room creator has not joined.")
+    try:
+        rooms.start_room(room_id, creator_id, player_token)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except GameError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    await _broadcast(room)
+    return {"phase": room.phase}
 
 
 @app.websocket("/ws/{room_id}/{player_id}")
 async def game_socket(websocket: WebSocket, room_id: str, player_id: str) -> None:
     room = rooms.rooms.get(room_id.upper())
     token = websocket.query_params.get("token", "")
-    stored_token = room.player_tokens.get(player_id) if room is not None else None
+    is_spectator = room is not None and player_id in room.spectator_tokens
+    stored_token = (
+        room.spectator_tokens.get(player_id)
+        if is_spectator and room is not None
+        else room.player_tokens.get(player_id)
+        if room is not None
+        else None
+    )
     if (
         room is None
         or stored_token is None
@@ -131,6 +160,10 @@ async def game_socket(websocket: WebSocket, room_id: str, player_id: str) -> Non
 
             try:
                 action = GameAction.model_validate_json(message)
+                if is_spectator:
+                    raise GameError("Spectators cannot control the match.")
+                if not room.started:
+                    raise GameError("The room creator has not started the match.")
                 if action.type == "move":
                     if action.direction is None:
                         raise GameError("A movement direction is required.")
@@ -138,7 +171,11 @@ async def game_socket(websocket: WebSocket, room_id: str, player_id: str) -> Non
                         player_id, *DIRECTIONS[action.direction], now=time.monotonic()
                     )
                 else:
-                    room.game.place_coil(player_id, time.monotonic())
+                    now = time.monotonic()
+                    if action.type == "place_coil":
+                        room.game.place_coil(player_id, now)
+                    else:
+                        room.game.detonate_remote(player_id, now)
                 room.game.tick(time.monotonic())
             except (ValueError, GameError) as error:
                 await websocket.send_json({"type": "error", "message": str(error)})
@@ -148,7 +185,16 @@ async def game_socket(websocket: WebSocket, room_id: str, player_id: str) -> Non
 
 
 async def _broadcast(room: Room) -> None:
-    message = {"type": "state", "state": room.game.snapshot()}
+    state = room.game.snapshot()
+    state.update(
+        {
+            "phase": room.phase,
+            "creator_id": room.creator_id,
+            "spectator_count": len(room.spectator_names),
+            "spectators": list(room.spectator_names.values()),
+        }
+    )
+    message = {"type": "state", "state": state}
     stale: list[str] = []
     for player_id, connection in list(room.connections.items()):
         try:

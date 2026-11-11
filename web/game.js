@@ -44,18 +44,44 @@ async function joinRoom(roomId, inviteCode, name) {
     method: "POST",
     body: JSON.stringify({ name, invite_code: inviteCode || null }),
   });
+  lastMoveSentAt = 0;
   lobby.classList.add("hidden");
   gamePanel.classList.remove("hidden");
   document.querySelector("#room-title").textContent = `Rum ${session.room_id}`;
-  document.querySelector("#room-meta").textContent = `Du spelar som ${name}. Dela rumskod eller privat inbjudningskod.`;
+  document.querySelector("#room-meta").textContent =
+    session.role === "spectator" ? `Du tittar på som ${name}.` : `Du spelar som ${name}.`;
+  document.querySelector("#start-button").classList.toggle("hidden", session.role !== "creator");
   const protocol = location.protocol === "https:" ? "wss:" : "ws:";
   socket = new WebSocket(`${protocol}//${location.host}${session.websocket_path}?token=${encodeURIComponent(session.token)}`);
   socket.addEventListener("message", (event) => {
     const message = JSON.parse(event.data);
     if (message.type === "state") {
       gameState = message.state;
+      const startButton = document.querySelector("#start-button");
+      startButton.disabled = gameState.players.length < 2 || gameState.phase !== "lobby";
+      startButton.classList.toggle("hidden", session.role !== "creator" || gameState.phase !== "lobby");
+      const localPlayer = gameState.players.find((player) => player.id === session.member_id);
+      document.querySelector("#remote-button").classList.toggle(
+        "hidden",
+        session.role === "spectator"
+          || gameState.phase !== "playing"
+          || !localPlayer?.alive
+          || !localPlayer.has_remote,
+      );
+      const gameStatus = document.querySelector("#game-status");
+      if (gameState.phase === "lobby") {
+        gameStatus.textContent = session.role === "creator"
+          ? `Väntar på spelare (${gameState.players.length}/${gameState.player_limit}). Du startar matchen.`
+          : `Väntar på att värden startar (${gameState.players.length}/${gameState.player_limit}).`;
+      } else if (session.role === "spectator") {
+        gameStatus.textContent = gameState.phase === "finished" ? "Matchen är avslutad." : "Du tittar på matchen som observatör.";
+      } else {
+        gameStatus.textContent = gameState.phase === "finished"
+          ? "Matchen är avslutad."
+          : `Matchen pågår${localPlayer?.alive ? "" : " · Du är utslagen och tittar nu som observatör"}.`;
+      }
       document.querySelector("#room-meta").textContent =
-        `${gameState.width}×${gameState.height} · ${gameState.player_limit} spelarplatser · ${gameState.soft_block_count} lådor · coils kan placeras direkt`;
+        `${gameState.width}×${gameState.height} · ${gameState.players.length}/${gameState.player_limit} spelare · ${gameState.spectator_count} observatörer · ${gameState.soft_block_count} lådor`;
       render();
     } else if (message.type === "error") {
       status.textContent = message.message;
@@ -67,6 +93,23 @@ async function joinRoom(roomId, inviteCode, name) {
 const softBlockPercentage = document.querySelector("#soft-block-percentage");
 softBlockPercentage.addEventListener("input", () => {
   document.querySelector("#soft-block-value").value = `${Number(softBlockPercentage.value).toFixed(1)}%`;
+});
+
+document.querySelector("#start-button").addEventListener("click", async () => {
+  try {
+    await request(`/api/rooms/${encodeURIComponent(session.room_id)}/start`, {
+      method: "POST",
+      headers: { "X-Player-Token": session.token },
+    });
+  } catch (error) {
+    status.textContent = error.message;
+  }
+});
+
+document.querySelector("#remote-button").addEventListener("click", () => {
+  if (socket?.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify({ type: "detonate_remote" }));
+  }
 });
 
 document.querySelector("#create-form").addEventListener("submit", async (event) => {
@@ -123,10 +166,13 @@ const directions = {
 
 window.addEventListener("keydown", (event) => {
   if (!session || socket?.readyState !== WebSocket.OPEN) return;
+  if (session.role === "spectator" || gameState?.phase !== "playing") return;
+  const localPlayer = gameState.players.find((player) => player.id === session.member_id);
+  if (!localPlayer?.alive) return;
   const direction = directions[event.key];
   if (direction) {
     event.preventDefault();
-    const player = gameState?.players.find((item) => item.id === session.player_id);
+    const player = gameState?.players.find((item) => item.id === session.member_id);
     const moveInterval = (player?.move_interval ?? 0.2) * 1000;
     const now = performance.now();
     if (now - lastMoveSentAt < moveInterval) return;
@@ -135,6 +181,8 @@ window.addEventListener("keydown", (event) => {
   } else if (event.code === "Space") {
     event.preventDefault();
     socket.send(JSON.stringify({ type: "place_coil" }));
+  } else if (event.key === "r" || event.key === "R") {
+    socket.send(JSON.stringify({ type: "detonate_remote" }));
   }
 });
 
@@ -183,11 +231,23 @@ function render() {
       `Räckvidd ${player.coil_range}`,
       ...(player.can_kick ? ["Kick"] : []),
       ...(player.has_speed_up ? ["Speed Up"] : []),
+      ...(player.has_remote ? ["Remote Control"] : []),
     ].join(" · ");
     item.textContent = `${player.name} · ${player.alive ? abilities : "ute"}`;
     if (!player.alive) item.style.color = "#78869e";
     playerList.append(item);
   }
+  const spectatorList = document.querySelector("#spectators");
+  spectatorList.replaceChildren();
+  for (const name of gameState.spectators || []) {
+    const item = document.createElement("li");
+    item.textContent = name;
+    spectatorList.append(item);
+  }
+  document.querySelector("#spectator-heading").classList.toggle(
+    "hidden",
+    !gameState.spectators?.length,
+  );
   if (gameState.winner_id) {
     const winner = gameState.players.find((player) => player.id === gameState.winner_id);
     status.textContent = `${winner.name} vann matchen!`;
@@ -196,7 +256,7 @@ function render() {
 
 function drawPowerups(powerups, size) {
   for (const powerup of powerups) {
-    if (!["kick", "fire", "bomb", "speed"].includes(powerup.type)) continue;
+    if (!["kick", "fire", "bomb", "speed", "remote"].includes(powerup.type)) continue;
     const center = cellCenter(powerup.x, powerup.y, size);
     context.save();
     context.translate(center.x, center.y);
@@ -206,6 +266,7 @@ function drawPowerups(powerups, size) {
       fire: { foreground: "#ffd166", background: "#49351b", icon: "F" },
       bomb: { foreground: "#ff9ac1", background: "#492437", icon: "B" },
       speed: { foreground: "#79d7ff", background: "#173848", icon: "S" },
+      remote: { foreground: "#e5a0ff", background: "#382448", icon: "R" },
     };
     const { foreground, background, icon } = colors[powerup.type];
     context.fillStyle = background;

@@ -11,6 +11,9 @@
 - [x] Bomb Up power-up drops, collection, and increased coil capacity.
 - [x] Players start with one coil slot; Bomb Up adds another slot.
 - [x] Speed Up power-up drops, collection, and faster movement.
+- [x] Creator-controlled match start after at least two players join.
+- [x] Spectator-only access for players joining after match start.
+- [x] Remote Control power-up and chain detonation.
 - [x] Choose the number of destructible blocks when creating a room.
 - [x] Browser lobby and arena with keyboard controls.
 - [x] Automated game, room, HTTP, and WebSocket tests.
@@ -30,7 +33,6 @@
 
 ### 2. Improve match and connection lifecycle
 
-- Define when a room becomes a started match and whether late joins are allowed.
 - Handle disconnects, reconnects, and abandoned-room cleanup explicitly.
 - Add a rematch flow and a clear match-over state.
 - Add sensible limits for room creation and incoming game actions.
@@ -39,7 +41,6 @@
 
 - Improve movement timing and visuals for lightning and block destruction.
 - Add sound, mobile-friendly controls, and clearer player/team status.
-- Add remote-trigger power-up.
 - Tune arena size, spawn distance, obstacles, fuse time, and attack range through
   playtesting.
 
@@ -102,6 +103,5 @@
 
    Browse to <http://127.0.0.1:8000>. Stop the server with `Ctrl+C`.
 
-6. Continue with roadmap phase 1. The repository currently has no Git commits;
-   once the first verified commit is created, use `git log` above to identify
-   the latest saved state.
+6. Continue with the remaining roadmap items. Use `git log` above to identify
+   the latest saved state and check `git status --short` before editing.

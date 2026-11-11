@@ -21,7 +21,7 @@ SPEED_UP_MOVE_INTERVAL_SECONDS = 0.12
 KICK_COIL_STEP_SECONDS = 0.15
 LIGHTNING_VISUAL_SECONDS = 0.65
 POWERUP_DROP_CHANCE = 0.25
-BLOCK_POWERUPS = ("kick", "fire", "bomb", "speed")
+BLOCK_POWERUPS = ("kick", "fire", "bomb", "speed", "remote")
 
 
 class GameError(ValueError):
@@ -39,6 +39,7 @@ class Player:
     coil_range: int = COIL_RANGE
     can_kick: bool = False
     has_speed_up: bool = False
+    has_remote: bool = False
     next_move_at: float = 0
 
     @property
@@ -63,7 +64,8 @@ class TeslaCoil:
     id: int
     owner_id: str
     position: Position
-    explodes_at: float
+    explodes_at: float | None
+    remote_controlled: bool = False
     kick_direction: Position | None = None
     next_kick_step_at: float | None = None
 
@@ -257,6 +259,8 @@ class GameState:
             player.coil_capacity += 1
         elif powerup == "speed":
             player.has_speed_up = True
+        elif powerup == "remote":
+            player.has_remote = True
         if now is not None:
             player.next_move_at = now + player.move_interval
         return destination
@@ -305,11 +309,25 @@ class GameState:
             id=self._next_coil_id,
             owner_id=player_id,
             position=player.position,
-            explodes_at=now + COIL_FUSE_SECONDS,
+            explodes_at=None if player.has_remote else now + COIL_FUSE_SECONDS,
+            remote_controlled=player.has_remote,
         )
         self._next_coil_id += 1
         self.coils[coil.id] = coil
         return coil
+
+    def detonate_remote(self, player_id: str, now: float) -> list[int]:
+        player = self._get_living_player(player_id)
+        if not player.has_remote:
+            raise GameError("Remote Control is not available.")
+        coil_ids = [
+            coil.id
+            for coil in self.coils.values()
+            if coil.owner_id == player_id and coil.remote_controlled
+        ]
+        if not coil_ids:
+            raise GameError("There are no remote-controlled coils to detonate.")
+        return self._explode_coils(coil_ids, now)
 
     def tick(self, now: float) -> list[int]:
         self.lightning_effects = [
@@ -321,7 +339,7 @@ class GameState:
         while True:
             due_events = []
             for coil in self.coils.values():
-                if coil.explodes_at <= now:
+                if coil.explodes_at is not None and coil.explodes_at <= now:
                     due_events.append((coil.explodes_at, 0, coil.id, "explode"))
                 if (
                     coil.next_kick_step_at is not None
@@ -342,28 +360,31 @@ class GameState:
                     coil.next_kick_step_at += KICK_COIL_STEP_SECONDS
                 continue
 
-            pending = deque([coil_id])
-            while pending:
-                chained_id = pending.popleft()
-                chained_coil = self.coils.get(chained_id)
-                if chained_coil is None:
-                    continue
-                cells = self._lightning_cells(chained_coil)
-                for player in self.players.values():
-                    if player.alive and player.position in cells:
-                        player.lives -= 1
-                self.lightning_effects.append(
-                    LightningEffect(
-                        chained_coil.position,
-                        cells,
-                        event_at + LIGHTNING_VISUAL_SECONDS,
-                    )
+            exploded.extend(self._explode_coils([coil_id], event_at))
+        return exploded
+
+    def _explode_coils(self, coil_ids: list[int], now: float) -> list[int]:
+        pending = deque(coil_ids)
+        exploded: list[int] = []
+        while pending:
+            coil_id = pending.popleft()
+            coil = self.coils.get(coil_id)
+            if coil is None:
+                continue
+            cells = self._lightning_cells(coil)
+            for player in self.players.values():
+                if player.alive and player.position in cells:
+                    player.lives -= 1
+            self.lightning_effects.append(
+                LightningEffect(
+                    coil.position, cells, now + LIGHTNING_VISUAL_SECONDS
                 )
-                for other in list(self.coils.values()):
-                    if other.id != chained_id and other.position in cells:
-                        pending.append(other.id)
-                del self.coils[chained_id]
-                exploded.append(chained_id)
+            )
+            for other in list(self.coils.values()):
+                if other.id != coil.id and other.position in cells:
+                    pending.append(other.id)
+            del self.coils[coil.id]
+            exploded.append(coil.id)
         return exploded
 
     def _lightning_cells(self, coil: TeslaCoil) -> set[Position]:
@@ -415,6 +436,7 @@ class GameState:
                     "coil_capacity": player.coil_capacity,
                     "move_interval": player.move_interval,
                     "has_speed_up": player.has_speed_up,
+                    "has_remote": player.has_remote,
                     "coil_slots": player.coil_capacity
                     - sum(
                         coil.owner_id == player.id for coil in self.coils.values()
@@ -423,7 +445,12 @@ class GameState:
                 for player in self.players.values()
             ],
             "coils": [
-                {"id": coil.id, "x": coil.position[0], "y": coil.position[1]}
+                {
+                    "id": coil.id,
+                    "x": coil.position[0],
+                    "y": coil.position[1],
+                    "remote_controlled": coil.remote_controlled,
+                }
                 for coil in self.coils.values()
             ],
             "lightning": [

@@ -31,7 +31,8 @@ def test_lobby_and_private_room_http_flow() -> None:
         json={"name": "Guest", "invite_code": private_room["invite_code"]},
     )
     assert joined.status_code == 200
-    assert joined.json()["player_id"] == "player-1"
+    assert joined.json()["member_id"] == "player-1"
+    assert joined.json()["role"] == "creator"
 
 
 def test_room_creation_accepts_custom_soft_block_count() -> None:
@@ -116,6 +117,9 @@ def test_websocket_sends_state_and_accepts_game_actions() -> None:
     joined = client.post(
         f"/api/rooms/{room['room_id']}/join", json={"name": "Player"}
     ).json()
+    guest = client.post(
+        f"/api/rooms/{room['room_id']}/join", json={"name": "Guest"}
+    ).json()
     url = f"{joined['websocket_path']}?token={joined['token']}"
 
     with client.websocket_connect(url) as websocket:
@@ -123,7 +127,62 @@ def test_websocket_sends_state_and_accepts_game_actions() -> None:
         assert initial["type"] == "state"
         assert initial["state"]["player_limit"] == 12
         assert initial["state"]["players"][0]["coil_capacity"] == 1
+        assert initial["state"]["phase"] == "lobby"
+        websocket.send_json({"type": "place_coil"})
+        rejected = websocket.receive_json()
+        assert rejected == {
+            "type": "error",
+            "message": "The room creator has not started the match.",
+        }
+        websocket.receive_json()
+        assert client.post(
+            f"/api/rooms/{room['room_id']}/start",
+            headers={"X-Player-Token": joined["token"]},
+        ).json() == {"phase": "playing"}
+        updated = websocket.receive_json()
+        assert updated["state"]["phase"] == "playing"
         websocket.send_json({"type": "place_coil"})
         updated = websocket.receive_json()
         assert updated["type"] == "state"
         assert len(updated["state"]["coils"]) == 1
+
+    late_join = client.post(
+        f"/api/rooms/{room['room_id']}/join", json={"name": "Viewer"}
+    ).json()
+    assert late_join["role"] == "spectator"
+    assert late_join["member_id"].startswith("spectator-")
+    spectator_url = f"{late_join['websocket_path']}?token={late_join['token']}"
+    with client.websocket_connect(spectator_url) as websocket:
+        initial = websocket.receive_json()
+        assert initial["state"]["spectator_count"] == 1
+        websocket.send_json({"type": "place_coil"})
+        rejected = websocket.receive_json()
+        assert rejected == {
+            "type": "error",
+            "message": "Spectators cannot control the match.",
+        }
+        websocket.receive_json()
+
+
+def test_only_room_creator_can_start_and_two_players_are_required() -> None:
+    rooms.rooms.clear()
+    client = TestClient(app)
+    room = client.post("/api/rooms", json={"private": False}).json()
+    host = client.post(
+        f"/api/rooms/{room['room_id']}/join", json={"name": "Host"}
+    ).json()
+
+    too_early = client.post(
+        f"/api/rooms/{room['room_id']}/start",
+        headers={"X-Player-Token": host["token"]},
+    )
+    assert too_early.status_code == 409
+
+    guest = client.post(
+        f"/api/rooms/{room['room_id']}/join", json={"name": "Guest"}
+    ).json()
+    unauthorized = client.post(
+        f"/api/rooms/{room['room_id']}/start",
+        headers={"X-Player-Token": guest["token"]},
+    )
+    assert unauthorized.status_code == 403

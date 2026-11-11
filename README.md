@@ -72,8 +72,15 @@ For the development roadmap and steps to resume work in a new session, see
   simultaneous Tesla coil slot for that player during the match.
 - Speed Up can drop from destroyed blocks and lets its collector move one tile
   every 0.12 seconds instead of the usual 0.2 seconds.
+- The room creator starts the match once at least two players have joined. Game
+  actions are disabled in the lobby; anyone joining after the match starts is
+  an observer and cannot control a player.
+- Remote Control can drop from destroyed blocks. New coils belonging to its
+  collector wait until they are manually triggered with the R key or the
+  on-screen control; the resulting lightning can chain-detonate other coils.
 - Create a public room to list it in the lobby. A private room is hidden from
   the list and requires its invitation code to join.
 
-Movement uses the arrow keys or WASD; Space places a coil. Room state is held
-in memory and is lost when the server restarts.
+Movement uses the arrow keys or WASD; Space places a coil, and R triggers
+Remote Control coils. Room state is held in memory and is lost when the server
+restarts.

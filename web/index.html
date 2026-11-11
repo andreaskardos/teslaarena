@@ -54,11 +54,18 @@
       <section id="game" class="panel hidden">
         <div class="game-heading">
           <div><h2 id="room-title"></h2><p id="room-meta"></p></div>
-          <button id="leave-button" class="secondary">Lämna rum</button>
+          <div class="game-actions">
+            <button id="start-button" class="hidden">Starta match</button>
+            <button id="remote-button" class="secondary hidden">Fjärrutlös coils (R)</button>
+            <button id="leave-button" class="secondary">Lämna rum</button>
+          </div>
         </div>
         <canvas id="arena" aria-label="Spelplan"></canvas>
-        <p class="controls">Rörelse: piltangenter eller WASD · Placera Tesla coil direkt från start: mellanslag · Med Kick: gå in i en coil för att sparka den</p>
+        <p id="game-status" class="controls"></p>
+        <p class="controls">Rörelse: piltangenter eller WASD · Placera Tesla coil: mellanslag · Med Kick: gå in i en coil för att sparka den · Remote Control: R</p>
         <ul id="players"></ul>
+        <h3 id="spectator-heading" class="hidden">Observatörer</h3>
+        <ul id="spectators"></ul>
       </section>
     </main>
     <script src="/game.js" defer></script>

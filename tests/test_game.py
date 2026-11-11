@@ -239,7 +239,7 @@ def test_destroyed_soft_block_can_drop_kick_powerup_and_player_collects_it() -> 
 
 def test_fire_powerup_increases_range_and_extends_lightning() -> None:
     game = GameState.create()
-    game._random = Random(3)
+    game._random = Random(28)
     owner = game.join_player("Owner")
     target = game.join_player("Target")
     owner.x, owner.y = 5, 5
@@ -292,6 +292,46 @@ def test_speed_up_drop_increases_server_validated_movement_speed() -> None:
         game.move(player.id, 1, 0, now=10.1)
     game.move(player.id, 1, 0, now=10.12)
     assert player.position == (7, 5)
+
+
+def test_remote_control_coils_wait_for_manual_detonation_and_chain() -> None:
+    game = GameState.create()
+    game.soft_blocks.clear()
+    owner = game.join_player("Owner")
+    target = game.join_player("Target")
+    owner.x, owner.y = 5, 5
+    owner.coil_capacity = 2
+    target.x, target.y = 9, 5
+    game.powerups[(6, 5)] = "remote"
+    game.move(owner.id, 1, 0)
+    assert owner.has_remote
+    owner.x, owner.y = 5, 5
+    first = game.place_coil(owner.id, 0)
+    owner.x, owner.y = 7, 5
+    chained = game.place_coil(owner.id, 0.1)
+    owner.x, owner.y = 6, 7
+
+    assert first.explodes_at is None
+    assert chained.explodes_at is None
+    assert game.tick(10) == []
+    assert len(game.coils) == 2
+    assert game.detonate_remote(owner.id, 10) == [first.id, chained.id]
+
+    assert not game.coils
+    assert owner.alive
+    assert target.lives == 0
+
+
+def test_remote_control_rejects_unavailable_or_empty_detonation() -> None:
+    game = GameState.create()
+    player = game.join_player("Player")
+
+    with pytest.raises(GameError, match="not available"):
+        game.detonate_remote(player.id, 0)
+
+    player.has_remote = True
+    with pytest.raises(GameError, match="no remote-controlled coils"):
+        game.detonate_remote(player.id, 0)
 
 
 def test_kick_powerup_slides_coil_until_obstacle_and_player_takes_its_tile() -> None:
