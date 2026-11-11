@@ -46,7 +46,8 @@ python -m pytest
 ```
 
 For the development roadmap and steps to resume work in a new session, see
-[ROADMAP.md](ROADMAP.md).
+[ROADMAP.md](ROADMAP.md). For a concise restart and project handover guide, see
+[HANDOVER.md](HANDOVER.md).
 
 ## Battle rules
 
