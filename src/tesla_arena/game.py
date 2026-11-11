@@ -15,7 +15,8 @@ COIL_RANGE = 2
 COIL_CAPACITY = 4
 KICK_COIL_STEP_SECONDS = 0.15
 LIGHTNING_VISUAL_SECONDS = 0.65
-KICK_POWERUP_DROP_CHANCE = 0.25
+POWERUP_DROP_CHANCE = 0.25
+BLOCK_POWERUPS = ("kick", "fire")
 
 
 class GameError(ValueError):
@@ -174,6 +175,8 @@ class GameState:
         powerup = self.powerups.pop(destination, None)
         if powerup == "kick":
             player.can_kick = True
+        elif powerup == "fire":
+            player.coil_range += 1
         return destination
 
     def _kick_coil(self, coil: TeslaCoil, dx: int, dy: int, now: float) -> None:
@@ -295,9 +298,9 @@ class GameState:
                     self.soft_blocks.remove(position)
                     if (
                         position not in self.powerups
-                        and self._random.random() < KICK_POWERUP_DROP_CHANCE
+                        and self._random.random() < POWERUP_DROP_CHANCE
                     ):
-                        self.powerups[position] = "kick"
+                        self.powerups[position] = self._random.choice(BLOCK_POWERUPS)
                     break
         return cells
 
@@ -323,6 +326,7 @@ class GameState:
                     "lives": player.lives,
                     "alive": player.alive,
                     "can_kick": player.can_kick,
+                    "coil_range": player.coil_range,
                     "coil_slots": player.coil_capacity
                     - sum(
                         coil.owner_id == player.id for coil in self.coils.values()

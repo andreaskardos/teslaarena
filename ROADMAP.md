@@ -7,6 +7,7 @@
 - [x] Twelve-player rooms, public room discovery, private invitation codes, and
       authenticated WebSocket connections.
 - [x] Kick power-up drops, collection, and coil sliding.
+- [x] Fire Up power-up drops, collection, and increased lightning range.
 - [x] Browser lobby and arena with keyboard controls.
 - [x] Automated game, room, HTTP, and WebSocket tests.
 - [x] Windows virtual-environment setup and dependency list.
@@ -34,7 +35,7 @@
 
 - Improve movement timing and visuals for lightning and block destruction.
 - Add sound, mobile-friendly controls, and clearer player/team status.
-- Add range, coil capacity, speed, and remote-trigger power-ups.
+- Add coil capacity, speed, and remote-trigger power-ups.
 - Tune arena size, spawn distance, obstacles, fuse time, and attack range through
   playtesting.
 

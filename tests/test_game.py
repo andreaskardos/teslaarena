@@ -125,7 +125,7 @@ def test_soft_block_is_destroyed_and_stops_lightning() -> None:
 
 def test_destroyed_soft_block_can_drop_kick_powerup_and_player_collects_it() -> None:
     game = GameState.create()
-    game._random = Random(1)
+    game._random = Random(4)
     owner = game.join_player("Owner")
     owner.x, owner.y = 5, 5
     game.soft_blocks.add((6, 5))
@@ -143,6 +143,34 @@ def test_destroyed_soft_block_can_drop_kick_powerup_and_player_collects_it() -> 
     game.move(owner.id, 1, 0)
     assert owner.can_kick
     assert game.powerups == {}
+
+
+def test_fire_powerup_increases_range_and_extends_lightning() -> None:
+    game = GameState.create()
+    game._random = Random(8)
+    owner = game.join_player("Owner")
+    target = game.join_player("Target")
+    owner.x, owner.y = 5, 5
+    game.soft_blocks.add((6, 5))
+    game.place_coil(owner.id, 0)
+    for _ in range(3):
+        game.move(owner.id, -1, 0)
+
+    game.tick(3)
+
+    assert game.powerups[(6, 5)] == "fire"
+    for _ in range(4):
+        game.move(owner.id, 1, 0)
+
+    assert owner.coil_range == 3
+    assert game.snapshot()["players"][0]["coil_range"] == 3
+    owner.x, owner.y = 5, 5
+    target.x, target.y = 8, 5
+    game.place_coil(owner.id, 4)
+    game.tick(6.5)
+
+    assert target.lives == 0
+    assert [8, 5] in game.snapshot()["lightning"][0]["cells"]
 
 
 def test_kick_powerup_slides_coil_until_obstacle_and_player_takes_its_tile() -> None:

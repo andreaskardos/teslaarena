@@ -62,6 +62,8 @@ For the development roadmap and steps to resume work in a new session, see
 - Destroyed soft blocks have a chance to drop a Kick power-up. A player with Kick
   can walk into a Tesla coil to send it one tile at a time down a corridor; it
   stops at obstacles and still explodes when its original fuse expires.
+- Destroyed soft blocks can also drop Fire Up, which permanently increases that
+  player's Tesla coil lightning range by one tile for the current match.
 - Create a public room to list it in the lobby. A private room is hidden from
   the list and requires its invitation code to join.
 

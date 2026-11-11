@@ -162,6 +162,7 @@ function render() {
     const abilities = [
       `${player.lives} liv`,
       `${player.coil_slots} lediga coils`,
+      `Räckvidd ${player.coil_range}`,
       ...(player.can_kick ? ["Kick"] : []),
     ].join(" · ");
     item.textContent = `${player.name} · ${player.alive ? abilities : "ute"}`;
@@ -176,22 +177,24 @@ function render() {
 
 function drawPowerups(powerups, size) {
   for (const powerup of powerups) {
-    if (powerup.type !== "kick") continue;
+    if (powerup.type !== "kick" && powerup.type !== "fire") continue;
     const center = cellCenter(powerup.x, powerup.y, size);
     context.save();
     context.translate(center.x, center.y);
     context.rotate(Math.PI / 4);
-    context.fillStyle = "#153f35";
+    const color = powerup.type === "kick" ? "#8cff9b" : "#ffd166";
+    const background = powerup.type === "kick" ? "#153f35" : "#49351b";
+    context.fillStyle = background;
     context.fillRect(-size * 0.34, -size * 0.34, size * 0.68, size * 0.68);
-    context.strokeStyle = "#8cff9b";
+    context.strokeStyle = color;
     context.lineWidth = 2;
     context.strokeRect(-size * 0.34, -size * 0.34, size * 0.68, size * 0.68);
     context.restore();
-    context.fillStyle = "#bcffc2";
+    context.fillStyle = color;
     context.font = `bold ${Math.round(size * 0.62)}px sans-serif`;
     context.textAlign = "center";
     context.textBaseline = "middle";
-    context.fillText("K", center.x, center.y + 1);
+    context.fillText(powerup.type === "kick" ? "K" : "F", center.x, center.y + 1);
   }
 }
 
