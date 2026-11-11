@@ -22,6 +22,13 @@ from tesla_arena.game import (
 DISCONNECT_GRACE_SECONDS = 15.0
 # How long a room without any members is kept before it is deleted.
 EMPTY_ROOM_SECONDS = 30.0
+# Caps that keep one server's memory use bounded.
+MAX_ROOMS = 200
+MAX_SPECTATORS_PER_ROOM = 50
+
+
+class RoomLimitError(GameError):
+    """The server cannot host more rooms right now."""
 
 
 @dataclass
@@ -79,6 +86,8 @@ class RoomManager:
         player_limit: int = MAX_PLAYERS,
         soft_block_percentage: float = DEFAULT_SOFT_BLOCK_PERCENTAGE,
     ) -> tuple[Room, str | None]:
+        if len(self.rooms) >= MAX_ROOMS:
+            raise RoomLimitError("The server is full. Try again later.")
         room_id = secrets.token_hex(3).upper()
         while room_id in self.rooms:
             room_id = secrets.token_hex(3).upper()
@@ -127,6 +136,8 @@ class RoomManager:
             clean_name = name.strip()
             if not clean_name or len(clean_name) > 20:
                 raise GameError("Player name must be between 1 and 20 characters.")
+            if len(room.spectator_tokens) >= MAX_SPECTATORS_PER_ROOM:
+                raise GameError("This room has no more spectator places.")
             spectator_id = f"spectator-{room._next_spectator_id}"
             room._next_spectator_id += 1
             room.spectator_names[spectator_id] = clean_name

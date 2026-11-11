@@ -34,7 +34,7 @@ button:hover { background: #8be6ff; }
 button.secondary { color: #d7e1f4; background: #2b3a56; }
 #status { min-height: 1.5em; }
 #rooms, #players { padding-left: 20px; color: #c9d5ea; }
-.hidden { display: none; }
+.hidden { display: none !important; }
 .game-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .game-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 #arena { display: block; width: min(100%, 700px); height: auto; margin: 12px auto; image-rendering: pixelated; border: 2px solid #374862; border-radius: 8px; }

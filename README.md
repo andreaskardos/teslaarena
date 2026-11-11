@@ -104,3 +104,6 @@ restarts.
   to its lobby with a new arena of the same size and density, keeping the
   remaining players and bots, so bots can be adjusted before the next start.
 - Rooms without any players are deleted after 30 seconds.
+- Each address can create 5 rooms and join 30 times per minute, and each
+  connection can send 20 game actions per second (bursts of 40). The server
+  hosts at most 200 rooms with up to 50 spectators each.

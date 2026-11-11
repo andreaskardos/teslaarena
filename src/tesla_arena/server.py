@@ -10,7 +10,14 @@ from contextlib import asynccontextmanager, contextmanager, suppress
 from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import (
+    FastAPI,
+    Header,
+    HTTPException,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -21,7 +28,8 @@ from tesla_arena.game import (
     MAX_PLAYERS,
     GameError,
 )
-from tesla_arena.rooms import Room, RoomManager
+from tesla_arena.limits import TokenBucket, WindowLimiter
+from tesla_arena.rooms import Room, RoomLimitError, RoomManager
 
 
 class CreateRoomRequest(BaseModel):
@@ -51,6 +59,24 @@ class GameAction(BaseModel):
 rooms = RoomManager()
 logger = logging.getLogger(__name__)
 SWEEP_SECONDS = 1.0
+# Per client IP address.
+room_creation_limiter = WindowLimiter(limit=5, window_seconds=60)
+join_limiter = WindowLimiter(limit=30, window_seconds=60)
+# Per WebSocket connection. Humans send far fewer actions than this.
+ACTIONS_PER_SECOND = 20
+ACTION_BURST = 40
+MAX_MESSAGE_CHARACTERS = 1024
+
+
+def _client_key(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+def _check_rate(limiter: WindowLimiter, request: Request) -> None:
+    if not limiter.allow(_client_key(request)):
+        raise HTTPException(
+            status_code=429, detail="Too many requests. Wait a minute and try again."
+        )
 
 
 async def _sweep_rooms_forever() -> None:
@@ -97,7 +123,10 @@ async def list_rooms() -> list[dict[str, object]]:
 
 
 @app.post("/api/rooms")
-async def create_room(request: CreateRoomRequest) -> dict[str, object]:
+async def create_room(
+    request: CreateRoomRequest, http_request: Request
+) -> dict[str, object]:
+    _check_rate(room_creation_limiter, http_request)
     try:
         room, invite_code = rooms.create_room(
             request.private,
@@ -106,6 +135,8 @@ async def create_room(request: CreateRoomRequest) -> dict[str, object]:
             player_limit=request.player_limit,
             soft_block_percentage=request.soft_block_percentage,
         )
+    except RoomLimitError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
     except GameError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     result: dict[str, object] = {
@@ -121,7 +152,10 @@ async def create_room(request: CreateRoomRequest) -> dict[str, object]:
 
 
 @app.post("/api/rooms/{room_id}/join")
-async def join_room(room_id: str, request: JoinRoomRequest) -> dict[str, str]:
+async def join_room(
+    room_id: str, request: JoinRoomRequest, http_request: Request
+) -> dict[str, str]:
+    _check_rate(join_limiter, http_request)
     try:
         room, member_id, token, role = rooms.join_room(
             room_id, request.name, request.invite_code
@@ -234,9 +268,23 @@ async def game_socket(websocket: WebSocket, room_id: str, player_id: str) -> Non
     await websocket.send_text(_state_message(room))
     await _broadcast(room)
     _ensure_room_loop(room)
+    actions = TokenBucket(rate=ACTIONS_PER_SECOND, capacity=ACTION_BURST)
+    last_rate_warning = 0.0
     try:
         while True:
             message = await websocket.receive_text()
+            if len(message) > MAX_MESSAGE_CHARACTERS:
+                await websocket.close(code=1009, reason="Message too large.")
+                break
+            if not actions.allow():
+                # Drop the action; warn at most once a second.
+                now = time.monotonic()
+                if now - last_rate_warning >= 1:
+                    last_rate_warning = now
+                    await websocket.send_json(
+                        {"type": "error", "message": "Too many actions. Slow down."}
+                    )
+                continue
             try:
                 action = GameAction.model_validate_json(message)
                 if action.type == "leave":

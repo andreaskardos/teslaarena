@@ -11,7 +11,8 @@ Updated: 2026-11-11
 - The room creator starts the match. AI bots (easy, medium, hard) can be added in the lobby; a creator who starts alone gets three automatically. Late arrivals can only spectate.
 - Dropped players have 15 seconds to reconnect; the creator can start a rematch when a match ends; empty rooms are deleted.
 - Remote Control allows its owner to trigger their coils with **R** or the in-game button.
-- Last test run: **68 passed**. `node --check web\game.js` and `git diff --check` passed. There is one existing Starlette/AnyIO deprecation warning.
+- Requests are rate limited per IP (5 rooms and 30 joins per minute) and per connection (20 actions per second); the server holds at most 200 rooms and 50 spectators per room.
+- Last test run: **75 passed**. `node --check web\game.js` and `git diff --check` passed. There is one existing Starlette/AnyIO deprecation warning.
 
 ## Resume after restarting the PC
 
@@ -76,8 +77,13 @@ movement and Tesla-coil combat, Remote Control, the winner display, rematches,
 and reloading the page or closing a tab mid-match. Record any issues as
 regression tests before changing game behavior.
 
-After that: limits on room creation and incoming game actions (roadmap
-stage 2).
+A scripted two-browser run in Edge already covers the lobby, adding and
+removing bots, joining by code, reloading, closing a tab mid-match, rematch
+and leaving. Still to check by hand: private rooms, a full 12-player room, and
+how movement and the bots feel.
+
+Note: the per-IP limits use the direct client address. Behind a reverse proxy
+they need the forwarded address instead (roadmap stage 4).
 
 See [ROADMAP.md](ROADMAP.md) for the broader roadmap and [README.md](README.md)
 for setup and gameplay rules.
