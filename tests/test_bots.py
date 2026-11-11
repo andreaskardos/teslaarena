@@ -127,8 +127,8 @@ def test_creator_can_add_bots_alongside_human_players() -> None:
         manager.add_bot(room.id, host_token, "easy")
 
     assert [room.game.players[bot_id].name for bot_id in room.bots] == [
-        "Volt (svår)",
-        "Ampere (svår)",
+        "Volt (hard)",
+        "Ampere (hard)",
     ]
     manager.remove_bot(room.id, host_token, hard.id)
     assert hard.id not in room.game.players

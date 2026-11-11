@@ -311,7 +311,7 @@ def test_creator_manages_bots_over_http() -> None:
     assert add(host["token"], "genius").status_code == 422
     added = add(host["token"], "hard")
     assert added.status_code == 200
-    assert added.json()["name"] == "Volt (svår)"
+    assert added.json()["name"] == "Volt (hard)"
     bot_id = added.json()["bot_id"]
     assert rooms.rooms[room_id].game.players[bot_id].bot_skill == "hard"
 

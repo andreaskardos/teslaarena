@@ -52,7 +52,7 @@ class BotSkill:
 BOT_SKILLS: dict[str, BotSkill] = {
     "easy": BotSkill(
         key="easy",
-        label="lätt",
+        label="easy",
         think_seconds=0.45,
         mistake_chance=0.12,
         escape_check_chance=0.75,
@@ -63,7 +63,7 @@ BOT_SKILLS: dict[str, BotSkill] = {
     ),
     "medium": BotSkill(
         key="medium",
-        label="medel",
+        label="medium",
         think_seconds=0.28,
         mistake_chance=0.03,
         escape_check_chance=1.0,
@@ -74,7 +74,7 @@ BOT_SKILLS: dict[str, BotSkill] = {
     ),
     "hard": BotSkill(
         key="hard",
-        label="svår",
+        label="hard",
         think_seconds=0.12,
         mistake_chance=0.0,
         escape_check_chance=1.0,
