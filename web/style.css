@@ -4,6 +4,7 @@
   background: #101523;
   color: #edf2ff;
   font-synthesis: none;
+  --gap: 20px;
 }
 
 * { box-sizing: border-box; }
@@ -14,13 +15,39 @@ body {
   background: radial-gradient(ellipse at top, #1d2b45, #101523 60%);
 }
 
-main { width: min(940px, 94vw); margin: 0 auto; padding: 38px 0 56px; }
-header { margin-bottom: 24px; }
-h1 { margin: 2px 0 8px; font-size: clamp(2.5rem, 8vw, 4.5rem); letter-spacing: -0.06em; }
-h2 { margin: 0 0 14px; }
+/* Layout: left menu | stage | right menu (right only during a game). */
+.layout {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: var(--gap);
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--gap);
+}
+body.in-game .layout {
+  grid-template-columns: 280px minmax(0, 1fr) 290px;
+  max-width: none;
+  height: 100vh;
+}
+.sidebar { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+body.in-game .sidebar { overflow-y: auto; }
+.stage { display: flex; justify-content: center; align-items: flex-start; min-width: 0; }
+#lobby { width: 100%; }
+
+body:not(.in-game) .in-game-only { display: none !important; }
+body.in-game #lobby { display: none; }
+
+header p { margin: 0; }
+h1 { margin: 6px 0 10px; font-size: 2.6rem; line-height: 1; letter-spacing: -0.05em; }
+h2 { margin: 0 0 12px; }
+h3 { margin: 0 0 10px; }
 p { color: #aab8d2; }
+.tagline { font-size: 0.95rem; }
 .eyebrow { color: #57d8ff; font-weight: 800; letter-spacing: 0.2em; font-size: 0.75rem; }
-.panel { padding: 22px; background: #182135; border: 1px solid #2b3a56; border-radius: 18px; }
+.panel { padding: 18px; background: #182135; border: 1px solid #2b3a56; border-radius: 16px; }
+#status { margin: 0; color: #edf2ff; }
+#status:empty { display: none; }
+
 form { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 16px; }
 input, button { min-height: 42px; border-radius: 9px; font: inherit; }
 input { width: 180px; padding: 0 12px; color: #edf2ff; background: #101827; border: 1px solid #35445e; }
@@ -32,26 +59,56 @@ output { color: #55d9ff; font-weight: 800; }
 button { padding: 0 16px; border: 0; color: #06121d; font-weight: 800; background: #55d9ff; cursor: pointer; }
 button:hover { background: #8be6ff; }
 button.secondary { color: #d7e1f4; background: #2b3a56; }
-#status { min-height: 1.5em; }
+.hidden { display: none !important; }
+
+/* Left menu: room details, actions, controls help. */
+#room-panel h2 { margin-bottom: 2px; }
+#room-panel p { margin: 0 0 12px; }
+.game-status { color: #edf2ff; }
+.game-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.game-actions button { flex: 1 1 auto; }
+.bot-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px solid #2b3a56; }
+.bot-controls select { flex: 1; }
+.controls-help dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; font-size: 0.9rem; }
+.controls-help dt { color: #edf2ff; font-weight: 700; }
+.controls-help dd { margin: 0; color: #aab8d2; }
+
+/* Stage: the board fills the available height without scrolling. */
+#game { display: flex; justify-content: center; width: 100%; }
+#arena {
+  display: block;
+  width: min(100%, calc(100vh - 2 * var(--gap)));
+  height: auto;
+  image-rendering: pixelated;
+  border: 2px solid #374862;
+  border-radius: 8px;
+}
+
+/* Right menu: players and spectators. */
 #rooms { padding-left: 20px; color: #c9d5ea; }
-#players { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; padding: 0; color: #c9d5ea; list-style: none; }
+#players { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 0; padding: 0; color: #c9d5ea; list-style: none; }
 #players li { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 6px 10px; background: #141d2e; border-radius: 10px; }
-.player-info { display: flex; flex-direction: column; min-width: 0; }
+.player-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .player-info strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .player-info small { color: #8f9db5; }
 #players li.out { color: #78869e; }
 #players li.out .player-swatch { opacity: 0.35; }
 .player-swatch { flex: none; width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 0 2px #0f1626; }
-.hidden { display: none !important; }
-.game-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-.game-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
-#arena { display: block; width: min(100%, 700px); height: auto; margin: 12px auto; image-rendering: pixelated; border: 2px solid #374862; border-radius: 8px; }
-.controls { text-align: center; }
-.bot-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; margin-top: 12px; }
-.remove-bot { min-height: 28px; margin-left: 8px; padding: 0 10px; font-size: 0.85em; }
+.remove-bot { flex: none; width: 28px; min-height: 28px; padding: 0; font-size: 0.85em; }
+.remove-bot:hover { color: #06121d; background: #ff738c; }
+#spectator-heading { margin-top: 16px; }
+#spectators { margin: 0; padding-left: 20px; color: #c9d5ea; }
+
+/* Narrow screens: stack the menus around the board. */
+@media (max-width: 1100px) {
+  .layout,
+  body.in-game .layout { grid-template-columns: minmax(0, 1fr); height: auto; }
+  body.in-game .sidebar { overflow: visible; }
+  #arena { width: min(100%, 80vh); }
+}
 
 @media (max-width: 600px) {
-  main { padding-top: 20px; }
-  .panel { padding: 16px; }
+  :root { --gap: 12px; }
+  .panel { padding: 14px; }
   form > input:not([type="checkbox"]) { flex: 1 1 140px; width: auto; }
 }

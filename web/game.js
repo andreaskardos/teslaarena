@@ -1,5 +1,3 @@
-const lobby = document.querySelector("#lobby");
-const gamePanel = document.querySelector("#game");
 const status = document.querySelector("#status");
 const canvas = document.querySelector("#arena");
 const context = canvas.getContext("2d");
@@ -55,6 +53,8 @@ const ROUTINE_ERRORS = new Set([
   "The Tesla coil cannot be kicked in that direction.",
   // A key press can race the state update that tells the client it died.
   "Player is missing or has been eliminated.",
+  "No Tesla coil slots are available.",
+  "A Tesla coil is already on this tile.",
 ]);
 const RECONNECT_DELAY_MS = 1000;
 let reconnectTimer;
@@ -88,12 +88,14 @@ async function joinRoom(roomId, inviteCode, name) {
   enterRoom();
 }
 
-function enterRoom() {
+function enterRoom(message = "") {
+  // Replace the lobby prompt with a room-related message (or nothing).
+  status.textContent = message;
   lastMoveSentAt = 0;
   gameState = null;
   previousPhase = null;
-  lobby.classList.add("hidden");
-  gamePanel.classList.remove("hidden");
+  // Switches the page to the three-column game layout.
+  document.body.classList.add("in-game");
   document.querySelector("#room-title").textContent = `Room ${session.room_id}`;
   document.querySelector("#room-meta").textContent =
     session.role === "spectator" ? `Watching as ${session.name}.` : `Playing as ${session.name}.`;
@@ -138,8 +140,7 @@ function returnToLobby(message) {
   ws?.close();
   delete status.dataset.reconnecting;
   status.textContent = message;
-  gamePanel.classList.add("hidden");
-  lobby.classList.remove("hidden");
+  document.body.classList.remove("in-game");
   refreshRooms();
 }
 
@@ -260,11 +261,12 @@ document.querySelector("#create-form").addEventListener("submit", async (event) 
       }),
     });
     document.querySelector("#room-id").value = room.room_id;
+    if (room.invite_code) document.querySelector("#invite-code").value = room.invite_code;
+    await joinRoom(room.room_id, room.invite_code, document.querySelector("#player-name").value || "Player");
     if (room.invite_code) {
-      document.querySelector("#invite-code").value = room.invite_code;
+      // Shown after entering the room so other players can be invited.
       status.textContent = `Private room created. Invite code: ${room.invite_code}`;
     }
-    await joinRoom(room.room_id, room.invite_code, document.querySelector("#player-name").value || "Player");
   } catch (error) {
     status.textContent = error.message;
   }
@@ -387,7 +389,9 @@ function render() {
       const remove = document.createElement("button");
       remove.className = "secondary remove-bot";
       remove.type = "button";
-      remove.textContent = "Remove";
+      remove.textContent = "✕";
+      remove.title = `Remove ${player.name}`;
+      remove.setAttribute("aria-label", `Remove ${player.name}`);
       remove.addEventListener("click", () => creatorRequest(
         `/api/rooms/${encodeURIComponent(session.room_id)}/bots/${encodeURIComponent(player.id)}`,
         { method: "DELETE" },
@@ -520,8 +524,7 @@ function cellCenter(x, y, size) {
 const savedSession = loadSession();
 if (savedSession) {
   session = savedSession;
-  status.textContent = "Reconnecting to your room…";
-  enterRoom();
+  enterRoom("Reconnecting to your room…");
 }
 refreshRooms();
 window.setInterval(refreshRooms, 5000);

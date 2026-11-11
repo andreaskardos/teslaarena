@@ -8,77 +8,97 @@
     <link rel="stylesheet" href="/style.css">
   </head>
   <body>
-    <main>
-      <header>
-        <p class="eyebrow">MULTIPLAYER ARENA</p>
-        <h1>Tesla Arena</h1>
-        <p>Up to 12 players. Place Tesla coils, survive the lightning and be the last one standing.</p>
-      </header>
-      <p id="status" role="status">Enter a name, then create or join a room.</p>
-      <section id="lobby" class="panel">
-        <form id="create-form">
-          <label><input id="private-room" type="checkbox"> Private room</label>
-          <label for="arena-size">Arena size</label>
-          <select id="arena-size">
-            <option value="25">Small · 25×25</option>
-            <option value="35" selected>Medium · 35×35</option>
-            <option value="45">Large · 45×45</option>
-          </select>
-          <label for="player-limit">Player slots</label>
-          <select id="player-limit">
-            <option value="2">2 players</option>
-            <option value="3">3 players</option>
-            <option value="4">4 players</option>
-            <option value="5">5 players</option>
-            <option value="6">6 players</option>
-            <option value="7">7 players</option>
-            <option value="8">8 players</option>
-            <option value="9">9 players</option>
-            <option value="10">10 players</option>
-            <option value="11">11 players</option>
-            <option value="12" selected>12 players</option>
-          </select>
-          <label for="soft-block-percentage">Crates: <output id="soft-block-value">2.3%</output></label>
-          <input id="soft-block-percentage" type="range" min="0" max="100" step="0.1" value="2.3">
-          <small class="form-hint">Counted from playable tiles after spawn zones are reserved.</small>
-          <button type="submit">Create room</button>
-        </form>
-        <form id="join-form">
-          <input id="room-id" placeholder="Room code" maxlength="6" required>
-          <input id="invite-code" placeholder="Invite code (private room)">
-          <input id="player-name" placeholder="Your name" maxlength="20" required>
-          <button type="submit">Join</button>
-        </form>
-        <h2>Open rooms</h2>
-        <ul id="rooms"></ul>
-      </section>
-      <section id="game" class="panel hidden">
-        <div class="game-heading">
-          <div><h2 id="room-title"></h2><p id="room-meta"></p></div>
+    <div class="layout">
+      <aside class="sidebar sidebar-left">
+        <header>
+          <p class="eyebrow">MULTIPLAYER ARENA</p>
+          <h1>Tesla Arena</h1>
+          <p class="tagline">Up to 12 players. Place Tesla coils, survive the lightning and be the last one standing.</p>
+        </header>
+        <p id="status" role="status">Enter a name, then create or join a room.</p>
+        <section id="room-panel" class="panel in-game-only">
+          <h2 id="room-title"></h2>
+          <p id="room-meta"></p>
+          <p id="game-status" class="game-status"></p>
           <div class="game-actions">
             <button id="start-button" class="hidden">Start match</button>
             <button id="rematch-button" class="hidden">Play again</button>
             <button id="remote-button" class="secondary hidden">Detonate coils (R)</button>
             <button id="leave-button" class="secondary">Leave room</button>
           </div>
-        </div>
-        <div id="bot-controls" class="bot-controls hidden">
-          <label for="bot-skill">AI bot</label>
-          <select id="bot-skill">
-            <option value="easy">Easy</option>
-            <option value="medium" selected>Medium</option>
-            <option value="hard">Hard</option>
-          </select>
-          <button id="add-bot-button" class="secondary" type="button">Add bot</button>
-        </div>
-        <canvas id="arena" aria-label="Arena"></canvas>
-        <p id="game-status" class="controls"></p>
-        <p class="controls">Move: arrow keys or WASD · Place Tesla coil: Space · With Kick: walk into a coil to kick it · Remote Control: R</p>
-        <ul id="players"></ul>
-        <h3 id="spectator-heading" class="hidden">Spectators</h3>
-        <ul id="spectators"></ul>
-      </section>
-    </main>
+          <div id="bot-controls" class="bot-controls hidden">
+            <label for="bot-skill">AI bot</label>
+            <select id="bot-skill">
+              <option value="easy">Easy</option>
+              <option value="medium" selected>Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+            <button id="add-bot-button" class="secondary" type="button">Add bot</button>
+          </div>
+        </section>
+        <section class="panel controls-help in-game-only">
+          <h3>Controls</h3>
+          <dl>
+            <dt>Move</dt><dd>Arrow keys or WASD</dd>
+            <dt>Place Tesla coil</dt><dd>Space</dd>
+            <dt>Kick</dt><dd>Walk into a coil (with Kick)</dd>
+            <dt>Remote Control</dt><dd>R</dd>
+          </dl>
+        </section>
+      </aside>
+
+      <main class="stage">
+        <section id="lobby" class="panel">
+          <form id="create-form">
+            <label><input id="private-room" type="checkbox"> Private room</label>
+            <label for="arena-size">Arena size</label>
+            <select id="arena-size">
+              <option value="25">Small · 25×25</option>
+              <option value="35" selected>Medium · 35×35</option>
+              <option value="45">Large · 45×45</option>
+            </select>
+            <label for="player-limit">Player slots</label>
+            <select id="player-limit">
+              <option value="2">2 players</option>
+              <option value="3">3 players</option>
+              <option value="4">4 players</option>
+              <option value="5">5 players</option>
+              <option value="6">6 players</option>
+              <option value="7">7 players</option>
+              <option value="8">8 players</option>
+              <option value="9">9 players</option>
+              <option value="10">10 players</option>
+              <option value="11">11 players</option>
+              <option value="12" selected>12 players</option>
+            </select>
+            <label for="soft-block-percentage">Crates: <output id="soft-block-value">2.3%</output></label>
+            <input id="soft-block-percentage" type="range" min="0" max="100" step="0.1" value="2.3">
+            <small class="form-hint">Counted from playable tiles after spawn zones are reserved.</small>
+            <button type="submit">Create room</button>
+          </form>
+          <form id="join-form">
+            <input id="room-id" placeholder="Room code" maxlength="6" required>
+            <input id="invite-code" placeholder="Invite code (private room)">
+            <input id="player-name" placeholder="Your name" maxlength="20" required>
+            <button type="submit">Join</button>
+          </form>
+          <h2>Open rooms</h2>
+          <ul id="rooms"></ul>
+        </section>
+        <section id="game" class="in-game-only">
+          <canvas id="arena" aria-label="Arena"></canvas>
+        </section>
+      </main>
+
+      <aside class="sidebar sidebar-right in-game-only">
+        <section class="panel">
+          <h2>Players</h2>
+          <ul id="players"></ul>
+          <h3 id="spectator-heading" class="hidden">Spectators</h3>
+          <ul id="spectators"></ul>
+        </section>
+      </aside>
+    </div>
     <script src="/game.js" defer></script>
   </body>
 </html>
