@@ -1,0 +1,12 @@
+# Only src/ and web/ are needed in the image.
+.git
+.github
+.venv*
+.vscode
+.pytest_cache
+**/__pycache__
+**/*.py[cod]
+*.egg-info
+tests
+*.md
+compose.yaml
