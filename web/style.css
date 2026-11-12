@@ -76,6 +76,26 @@ button.secondary { color: #d7e1f4; background: #2b3a56; }
 /* Stage: the board fills the available height without scrolling. */
 #game { display: flex; justify-content: center; width: 100%; }
 #arena {
+  width: min(100%, calc(100vh - 2 * var(--gap) - 52px));
+}
+.time-input { width: 90px; text-align: center; font-variant-numeric: tabular-nums; }
+.match-timer {
+  padding: 6px 16px; border-radius: 999px;
+  font-size: 1.25rem; font-weight: 800; font-variant-numeric: tabular-nums;
+  color: #edf2ff; background: #182135; border: 1px solid #2b3a56;
+}
+.match-timer.urgent { color: #ffca62; border-color: #ffca62; }
+.match-timer.closing {
+  color: #fff; background: #8f1d33; border-color: #ff4058;
+  animation: timer-alarm 1s ease-in-out infinite;
+}
+@keyframes timer-alarm {
+  50% { box-shadow: 0 0 18px rgba(255, 64, 88, 0.7); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .match-timer.closing { animation: none; }
+}
+#arena {
   display: block;
   width: min(100%, calc(100vh - 2 * var(--gap)));
   height: auto;
@@ -85,7 +105,18 @@ button.secondary { color: #d7e1f4; background: #2b3a56; }
 }
 
 /* Right menu: players and spectators. */
-#rooms { padding-left: 20px; color: #c9d5ea; }
+/* Lobby: open rooms as cards with Join / Watch buttons. */
+#rooms { display: grid; gap: 10px; margin: 0; padding: 0; color: #c9d5ea; list-style: none; }
+.room-card { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 14px; background: #141d2e; border: 1px solid #2b3a56; border-radius: 12px; }
+.room-info { display: flex; flex-direction: column; gap: 3px; flex: 1 1 260px; min-width: 0; }
+.room-info small { color: #8f9db5; }
+.room-actions { display: flex; gap: 8px; }
+.room-phase { margin-left: 6px; padding: 2px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 700; vertical-align: middle; }
+.phase-lobby { color: #06121d; background: #9cf276; }
+.phase-playing { color: #06121d; background: #ffca62; }
+.phase-finished { color: #d7e1f4; background: #2b3a56; }
+.room-empty { color: #8f9db5; }
+#room-panel .room-stats { color: #8f9db5; font-size: 0.9rem; }
 #players { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 0; padding: 0; color: #c9d5ea; list-style: none; }
 #players li { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 6px 10px; background: #141d2e; border-radius: 10px; }
 .player-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }

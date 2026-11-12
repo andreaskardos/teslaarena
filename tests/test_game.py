@@ -44,7 +44,7 @@ def test_arena_has_exact_requested_number_of_safe_soft_blocks(block_count: int) 
 
 @pytest.mark.parametrize(
     ("size", "player_limit", "percentage"),
-    [(25, 2, 0), (25, 8, 10), (35, 12, 2.3), (45, 6, 25), (45, 12, 100)],
+    [(25, 2, 0), (25, 8, 10), (35, 4, 65), (45, 6, 25), (45, 8, 100)],
 )
 def test_arena_block_percentage_uses_available_tiles_after_spawn_safety(
     size: int, player_limit: int, percentage: float
@@ -430,8 +430,8 @@ def test_kick_stops_coil_before_another_player() -> None:
 def test_invalid_arena_dimensions_and_player_limit_are_rejected() -> None:
     with pytest.raises(GameError, match="at least 7"):
         GameState.create(width=5)
-    with pytest.raises(GameError, match="between 2 and 12"):
-        GameState.create(player_limit=13)
+    with pytest.raises(GameError, match="between 2 and 8"):
+        GameState.create(player_limit=9)
 
 
 def _shortest_path_length(
@@ -452,9 +452,9 @@ def _shortest_path_length(
 
 
 def test_players_get_unique_colors_that_are_reused_and_kept_on_rematch() -> None:
-    game = GameState.create(player_limit=12)
-    players = [game.join_player(f"P{index}") for index in range(12)]
-    assert sorted(player.color for player in players) == list(range(12))
+    game = GameState.create(player_limit=8)
+    players = [game.join_player(f"P{index}") for index in range(8)]
+    assert sorted(player.color for player in players) == list(range(8))
 
     game.remove_player(players[3].id)
     newcomer = game.join_player("New")

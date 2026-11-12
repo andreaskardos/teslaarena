@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 
 from tesla_arena.game import (
     DEFAULT_ARENA_SIZE,
+    DEFAULT_PLAYER_LIMIT,
     DEFAULT_SOFT_BLOCK_PERCENTAGE,
     MAX_PLAYERS,
     GameError,
@@ -33,9 +34,8 @@ from tesla_arena.rooms import Room, RoomLimitError, RoomManager
 
 
 class CreateRoomRequest(BaseModel):
-    private: bool = False
     arena_size: Literal[25, 35, 45] = DEFAULT_ARENA_SIZE
-    player_limit: int = Field(default=MAX_PLAYERS, ge=2, le=MAX_PLAYERS)
+    player_limit: int = Field(default=DEFAULT_PLAYER_LIMIT, ge=2, le=MAX_PLAYERS)
     soft_block_percentage: float = Field(
         default=DEFAULT_SOFT_BLOCK_PERCENTAGE, ge=0, le=100
     )
@@ -44,7 +44,8 @@ class CreateRoomRequest(BaseModel):
 
 class JoinRoomRequest(BaseModel):
     name: str = Field(min_length=1, max_length=20)
-    invite_code: str | None = None
+    spectate: bool = False
+    """Watch the room instead of taking a player slot."""
 
 
 class AddBotRequest(BaseModel):
@@ -128,8 +129,7 @@ async def create_room(
 ) -> dict[str, object]:
     _check_rate(room_creation_limiter, http_request)
     try:
-        room, invite_code = rooms.create_room(
-            request.private,
+        room = rooms.create_room(
             request.soft_block_count,
             arena_size=request.arena_size,
             player_limit=request.player_limit,
@@ -139,16 +139,13 @@ async def create_room(
         raise HTTPException(status_code=503, detail=str(error)) from error
     except GameError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
-    result: dict[str, object] = {
+    return {
         "room_id": room.id,
         "max_players": room.game.player_limit,
         "arena_size": room.game.width,
         "soft_block_count": room.game.soft_block_count,
         "soft_block_percentage": room.game.soft_block_percentage,
     }
-    if invite_code is not None:
-        result["invite_code"] = invite_code
-    return result
 
 
 @app.post("/api/rooms/{room_id}/join")
@@ -158,10 +155,8 @@ async def join_room(
     _check_rate(join_limiter, http_request)
     try:
         room, member_id, token, role = rooms.join_room(
-            room_id, request.name, request.invite_code
+            room_id, request.name, as_spectator=request.spectate
         )
-    except PermissionError as error:
-        raise HTTPException(status_code=403, detail=str(error)) from error
     except GameError as error:
         status = 404 if "not found" in str(error).lower() else 409
         raise HTTPException(status_code=status, detail=str(error)) from error
@@ -365,9 +360,14 @@ async def _run_room_loop(room: Room) -> None:
 
 
 def _state_message(room: Room) -> str:
+    # Building the message is where a just-finished match gets recorded.
+    room.record_result()
     state = room.game.snapshot()
     state.update(
         {
+            **room.stats(),
+            # Whole seconds, so a running match adds at most one update a second.
+            "match_seconds": room.match_seconds(),
             "phase": room.phase,
             "creator_id": room.creator_id,
             "spectator_count": len(room.spectator_names),

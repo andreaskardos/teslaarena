@@ -1,7 +1,7 @@
 # Tesla Arena
 
 Tesla Arena is a server-authoritative, browser-based multiplayer arena game. Its
-first playable version supports up to 12 players in public or invite-only rooms.
+first playable version supports up to 8 players per room.
 
 ## Set up on Windows
 
@@ -52,11 +52,11 @@ For the development roadmap and steps to resume work in a new session, see
 ## Battle rules
 
 - When creating a room, choose a 25×25, 35×35, or 45×45 arena and set the
-  player limit from 2 to 12. Twelve-player rooms retain their clear perimeter
-  spawns, at least 10 Manhattan tiles apart on the default 35×35 arena.
+  player limit from 2 to 8 (default 4). Players spawn spread out around the
+  perimeter of the arena.
 - Choose destructible block density from 0% to 100%. The percentage is applied
   to available interior tiles after spawn safety zones are reserved. The
-  default is 2.3% (16 blocks on the default 35×35, 12-player map).
+  default is 65%.
 - Players can place their starting Tesla coil immediately after joining.
 - Players start with one Tesla coil slot. Bomb Up power-ups increase the number
   of coils they can place at once. Coils discharge after
@@ -85,8 +85,10 @@ For the development roadmap and steps to resume work in a new session, see
 - Remote Control can drop from destroyed blocks. New coils belonging to its
   collector wait until they are manually triggered with the R key or the
   on-screen control; the resulting lightning can chain-detonate other coils.
-- Create a public room to list it in the lobby. A private room is hidden from
-  the list and requires its invitation code to join.
+- Every room is listed in the lobby with when it was created, its players,
+  how long the current match has run, and the last match's winner and length.
+  Click Join to take a free seat before the match starts, or Watch to
+  spectate at any time.
 
 Each player gets their own color, shown in the player list; your own
 character has a white ring. Movement uses the arrow keys or WASD; Space places a coil, and R triggers

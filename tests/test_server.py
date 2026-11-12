@@ -5,36 +5,36 @@ from fastapi.testclient import TestClient
 from tesla_arena.server import _broadcast, app, rooms
 
 
-def test_lobby_and_private_room_http_flow() -> None:
+def test_lobby_room_http_flow() -> None:
     rooms.rooms.clear()
     client = TestClient(app)
 
     assert client.get("/").status_code == 200
     assert client.get("/game.js").status_code == 200
 
-    created = client.post("/api/rooms", json={"private": True})
+    created = client.post("/api/rooms", json={})
     assert created.status_code == 200
-    private_room = created.json()
-    assert private_room["max_players"] == 12
-    assert private_room["soft_block_count"] == 16
-    assert private_room["arena_size"] == 35
-    assert private_room["room_id"] not in {
-        room["id"] for room in client.get("/api/rooms").json()
-    }
+    room = created.json()
+    assert room["max_players"] == 4
+    assert room["soft_block_percentage"] == 65
+    assert room["arena_size"] == 35
+    assert room["room_id"] in {item["id"] for item in client.get("/api/rooms").json()}
 
-    denied = client.post(
-        f"/api/rooms/{private_room['room_id']}/join",
-        json={"name": "Guest", "invite_code": "wrong"},
-    )
-    assert denied.status_code == 403
-
-    joined = client.post(
-        f"/api/rooms/{private_room['room_id']}/join",
-        json={"name": "Guest", "invite_code": private_room["invite_code"]},
-    )
+    joined = client.post(f"/api/rooms/{room['room_id']}/join", json={"name": "Guest"})
     assert joined.status_code == 200
     assert joined.json()["member_id"] == "player-1"
     assert joined.json()["role"] == "creator"
+
+    watching = client.post(
+        f"/api/rooms/{room['room_id']}/join", json={"name": "Fan", "spectate": True}
+    )
+    assert watching.json()["role"] == "spectator"
+
+
+def test_room_creation_rejects_more_than_eight_players() -> None:
+    client = TestClient(app)
+
+    assert client.post("/api/rooms", json={"player_limit": 9}).status_code == 422
 
 
 def test_room_creation_accepts_custom_soft_block_count() -> None:
@@ -43,7 +43,7 @@ def test_room_creation_accepts_custom_soft_block_count() -> None:
 
     created = client.post(
         "/api/rooms",
-        json={"private": False, "soft_block_count": 75},
+        json={"soft_block_count": 75},
     )
 
     assert created.status_code == 200
@@ -60,7 +60,6 @@ def test_room_creation_accepts_size_player_count_and_block_percentage() -> None:
     created = client.post(
         "/api/rooms",
         json={
-            "private": False,
             "arena_size": 45,
             "player_limit": 8,
             "soft_block_percentage": 25,
@@ -95,7 +94,7 @@ def test_room_creation_rejects_soft_block_count_above_limit() -> None:
 
     response = client.post(
         "/api/rooms",
-        json={"private": False, "soft_block_count": 201},
+        json={"soft_block_count": 201},
     )
 
     assert response.status_code == 422
@@ -106,7 +105,7 @@ def test_room_creation_rejects_unsupported_arena_size() -> None:
 
     response = client.post(
         "/api/rooms",
-        json={"private": False, "arena_size": 30},
+        json={"arena_size": 30},
     )
 
     assert response.status_code == 422
@@ -128,7 +127,7 @@ def _is_state(predicate):
 
 
 def _create_started_room(client: TestClient) -> tuple[dict, dict, dict]:
-    room = client.post("/api/rooms", json={"private": False}).json()
+    room = client.post("/api/rooms", json={}).json()
     host = client.post(
         f"/api/rooms/{room['room_id']}/join", json={"name": "Host"}
     ).json()
@@ -147,7 +146,9 @@ def test_websocket_sends_state_and_accepts_game_actions() -> None:
         with client.websocket_connect(url) as websocket:
             initial = websocket.receive_json()
             assert initial["type"] == "state"
-            assert initial["state"]["player_limit"] == 12
+            assert initial["state"]["player_limit"] == 4
+            assert initial["state"]["matches_played"] == 0
+            assert initial["state"]["match_seconds"] is None
             assert initial["state"]["players"][0]["coil_capacity"] == 1
             assert initial["state"]["phase"] == "lobby"
             websocket.send_json({"type": "place_coil"})
@@ -228,7 +229,7 @@ class _FakeConnection:
 
 def test_broadcast_skips_unchanged_state_and_drops_dead_connections() -> None:
     rooms.rooms.clear()
-    room, _invite = rooms.create_room(False)
+    room = rooms.create_room()
     healthy, dead = _FakeConnection(), _FakeConnection(fail=True)
     room.connections = {"player-1": healthy, "player-2": dead}
 
@@ -260,7 +261,7 @@ def test_only_room_creator_can_start_the_match() -> None:
 def test_lone_creator_starts_against_bots_that_play() -> None:
     rooms.rooms.clear()
     with TestClient(app) as client:
-        room = client.post("/api/rooms", json={"private": False}).json()
+        room = client.post("/api/rooms", json={}).json()
         host = client.post(
             f"/api/rooms/{room['room_id']}/join", json={"name": "Solo"}
         ).json()
@@ -295,7 +296,7 @@ def test_lone_creator_starts_against_bots_that_play() -> None:
 def test_creator_manages_bots_over_http() -> None:
     rooms.rooms.clear()
     client = TestClient(app)
-    room = client.post("/api/rooms", json={"private": False}).json()
+    room = client.post("/api/rooms", json={}).json()
     room_id = room["room_id"]
     host = client.post(f"/api/rooms/{room_id}/join", json={"name": "Host"}).json()
     guest = client.post(f"/api/rooms/{room_id}/join", json={"name": "Guest"}).json()

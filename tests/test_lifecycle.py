@@ -13,12 +13,12 @@ from tesla_arena.server import app, rooms
 CONNECTED = object()  # Stands in for a WebSocket in room-level tests.
 
 
-def _room_with(manager: RoomManager, *names: str, player_limit: int = 12):
-    room, _ = manager.create_room(private=False, player_limit=player_limit)
+def _room_with(manager: RoomManager, *names: str, player_limit: int = 8):
+    room = manager.create_room(player_limit=player_limit)
     start = room.empty_since
     members = []
     for name in names:
-        _, member_id, token, _ = manager.join_room(room.id, name, None, now=start)
+        _, member_id, token, _ = manager.join_room(room.id, name, now=start)
         connect(manager, room, member_id)
         members.append((member_id, token))
     return room, start, members
@@ -36,9 +36,9 @@ def disconnect(manager: RoomManager, room: Room, member_id: str, now: float) -> 
 
 def test_join_without_connecting_frees_the_slot_after_the_grace_period() -> None:
     manager = RoomManager()
-    room, _ = manager.create_room(private=False)
+    room = manager.create_room()
     start = room.empty_since
-    manager.join_room(room.id, "Ghost", None, now=start)
+    manager.join_room(room.id, "Ghost", now=start)
 
     assert manager.sweep(start + DISCONNECT_GRACE_SECONDS - 1) == []
     assert len(room.game.players) == 1
@@ -145,7 +145,7 @@ def test_rematch_returns_a_finished_room_to_its_lobby() -> None:
     assert room.game.players[bot.id].bot_skill == "hard"
     assert not room.game.coils and not room.game.powerups
     # The next joiner gets a fresh id rather than reusing one from the old match.
-    _, late_id, _, _ = manager.join_room(room.id, "Late", None)
+    _, late_id, _, _ = manager.join_room(room.id, "Late")
     assert late_id not in {host_id, guest_id, gone_id, bot.id}
 
 
@@ -165,7 +165,7 @@ def test_rematch_arena_keeps_the_room_settings() -> None:
 def test_websocket_leave_and_reconnect() -> None:
     rooms.rooms.clear()
     with TestClient(app) as client:
-        room_id = client.post("/api/rooms", json={"private": False}).json()["room_id"]
+        room_id = client.post("/api/rooms", json={}).json()["room_id"]
         host = client.post(f"/api/rooms/{room_id}/join", json={"name": "Host"}).json()
         guest = client.post(f"/api/rooms/{room_id}/join", json={"name": "Guest"}).json()
         host_url = f"{host['websocket_path']}?token={host['token']}"
@@ -193,7 +193,7 @@ def test_websocket_leave_and_reconnect() -> None:
 def test_rematch_over_http() -> None:
     rooms.rooms.clear()
     client = TestClient(app)
-    room_id = client.post("/api/rooms", json={"private": False}).json()["room_id"]
+    room_id = client.post("/api/rooms", json={}).json()["room_id"]
     host = client.post(f"/api/rooms/{room_id}/join", json={"name": "Host"}).json()
     client.post(f"/api/rooms/{room_id}/join", json={"name": "Guest"})
     headers = {"X-Player-Token": host["token"]}

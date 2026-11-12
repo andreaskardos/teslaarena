@@ -3,31 +3,31 @@ import pytest
 from tesla_arena.rooms import RoomManager
 
 
-def test_private_room_requires_its_invitation_code_and_is_not_listed() -> None:
+def test_joining_a_lobby_takes_a_player_slot_unless_spectating() -> None:
     manager = RoomManager()
-    room, invite_code = manager.create_room(private=True)
-    assert invite_code
+    room = manager.create_room()
 
-    with pytest.raises(PermissionError, match="invitation"):
-        manager.join_room(room.id, "Guest", "wrong")
-    assert manager.public_rooms() == []
-
-    joined_room, player_id, token, role = manager.join_room(
-        room.id, "Guest", invite_code
+    joined_room, player_id, token, role = manager.join_room(room.id, "Host")
+    _, watcher_id, _, watcher_role = manager.join_room(
+        room.id, "Watcher", as_spectator=True
     )
+
     assert joined_room is room
     assert player_id in room.game.players
     assert token
     assert role == "creator"
+    assert watcher_role == "spectator"
+    assert watcher_id not in room.game.players
+    assert room.spectator_names[watcher_id] == "Watcher"
 
 
 def test_creator_starts_match_and_late_joiners_are_spectators() -> None:
     manager = RoomManager()
-    room, _ = manager.create_room(private=False)
+    room = manager.create_room()
     host_room, host_id, host_token, host_role = manager.join_room(
-        room.id, "Host", None
+        room.id, "Host"
     )
-    _, guest_id, _, guest_role = manager.join_room(room.id, "Guest", None)
+    _, guest_id, _, guest_role = manager.join_room(room.id, "Guest")
 
     assert host_room is room
     assert host_role == "creator"
@@ -37,7 +37,7 @@ def test_creator_starts_match_and_late_joiners_are_spectators() -> None:
 
     manager.start_room(room.id, host_id, host_token)
     joined_room, spectator_id, _, spectator_role = manager.join_room(
-        room.id, "Viewer", None
+        room.id, "Viewer"
     )
 
     assert joined_room is room
@@ -51,9 +51,41 @@ def test_creator_starts_match_and_late_joiners_are_spectators() -> None:
     assert room.phase == "finished"
 
 
-def test_public_rooms_are_discoverable_and_private_rooms_are_not() -> None:
+def test_every_room_is_listed_with_its_stats() -> None:
     manager = RoomManager()
-    public_room, _ = manager.create_room(private=False)
-    manager.create_room(private=True)
+    room = manager.create_room()
 
-    assert [item["id"] for item in manager.public_rooms()] == [public_room.id]
+    [info] = manager.public_rooms()
+
+    assert info["id"] == room.id
+    assert info["max_players"] == 4
+    assert info["created_at"] == room.created_at
+    assert info["matches_played"] == 0
+    assert info["last_result"] is None
+    assert info["match_seconds"] is None
+
+
+def test_finished_match_records_winner_and_duration() -> None:
+    manager = RoomManager()
+    room = manager.create_room()
+    _, host_id, host_token, _ = manager.join_room(room.id, "Host")
+    _, guest_id, _, _ = manager.join_room(room.id, "Guest")
+    manager.start_room(room.id, host_id, host_token)
+    room.match_started_at -= 90  # pretend the match has run for 90 seconds
+
+    assert manager.public_rooms()[0]["match_seconds"] == 90
+    room.game.players[guest_id].lives = 0
+    [info] = manager.public_rooms()
+
+    assert info["phase"] == "finished"
+    assert info["matches_played"] == 1
+    assert info["last_result"]["winner"] == "Host"
+    assert info["last_result"]["players"] == 2
+    assert info["last_result"]["duration_seconds"] == 90
+    # Recording again does not count the same match twice.
+    room.record_result()
+    assert room.matches_played == 1
+
+    manager.rematch(room.id, host_token)
+    assert room.match_seconds() is None
+    assert manager.public_rooms()[0]["last_result"]["winner"] == "Host"

@@ -9,8 +9,8 @@ from tesla_arena.rooms import RoomManager
 
 def _solo_room(player_limit: int):
     manager = RoomManager()
-    room, _ = manager.create_room(private=False, player_limit=player_limit)
-    _, host_id, token, _ = manager.join_room(room.id, "Solo", None)
+    room = manager.create_room(player_limit=player_limit)
+    _, host_id, token, _ = manager.join_room(room.id, "Solo")
     manager.start_room(room.id, host_id, token)
     return room
 
@@ -18,7 +18,7 @@ def _solo_room(player_limit: int):
 @pytest.mark.parametrize(
     ("player_limit", "skills"),
     [
-        (12, ["easy", "medium", "hard"]),
+        (8, ["easy", "medium", "hard"]),
         (3, ["easy", "hard"]),
         (2, ["medium"]),
     ],
@@ -115,9 +115,9 @@ def test_bots_only_match_makes_progress() -> None:
 
 def test_creator_can_add_bots_alongside_human_players() -> None:
     manager = RoomManager()
-    room, _ = manager.create_room(private=False, player_limit=4)
-    _, host_id, host_token, _ = manager.join_room(room.id, "Host", None)
-    _, _, guest_token, _ = manager.join_room(room.id, "Guest", None)
+    room = manager.create_room(player_limit=4)
+    _, host_id, host_token, _ = manager.join_room(room.id, "Host")
+    _, _, guest_token, _ = manager.join_room(room.id, "Guest")
 
     with pytest.raises(PermissionError, match="room creator"):
         manager.add_bot(room.id, guest_token, "easy")
@@ -136,7 +136,7 @@ def test_creator_can_add_bots_alongside_human_players() -> None:
         manager.remove_bot(room.id, host_token, host_id)
 
     # The freed slot (and its spawn point) can go to a human.
-    _, late_id, _, role = manager.join_room(room.id, "Late", None)
+    _, late_id, _, role = manager.join_room(room.id, "Late")
     assert role == "player"
     manager.start_room(room.id, host_id, host_token)
     assert len(room.bots) == 1, "no extra bots when others have joined"
@@ -148,8 +148,8 @@ def test_creator_can_add_bots_alongside_human_players() -> None:
 
 def test_lone_creator_with_chosen_bots_gets_no_automatic_lineup() -> None:
     manager = RoomManager()
-    room, _ = manager.create_room(private=False)
-    _, host_id, host_token, _ = manager.join_room(room.id, "Host", None)
+    room = manager.create_room()
+    _, host_id, host_token, _ = manager.join_room(room.id, "Host")
     manager.add_bot(room.id, host_token, "easy")
 
     manager.start_room(room.id, host_id, host_token)

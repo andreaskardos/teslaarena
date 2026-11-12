@@ -4,7 +4,7 @@
 
 - [x] Python game rules for grid movement, obstacles, Tesla coils, lightning,
       elimination, and the last-player-standing result.
-- [x] Twelve-player rooms, public room discovery, private invitation codes, and
+- [x] Eight-player rooms, room discovery with Join/Watch and match stats, and
       authenticated WebSocket connections.
 - [x] Kick power-up drops, collection, and coil sliding.
 - [x] Fire Up power-up drops, collection, and increased lightning range.
@@ -31,8 +31,8 @@
 ### 1. Stabilize the first multiplayer release
 
 - Start the server and verify the lobby in a browser.
-- Test a public room and an invitation-only room in separate browser sessions.
-- Join with all 12 player slots and confirm a 13th join is rejected.
+- Join a listed room and watch another from separate browser sessions.
+- Join with all 8 player slots and confirm a 9th join is rejected.
 - Test movement, coil placement, wall/block interactions, self-elimination,
   player elimination, and winner display during a real match.
 - Fix issues found in that playtest and add regression tests.

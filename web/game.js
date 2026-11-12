@@ -26,18 +26,111 @@ async function request(path, options = {}) {
   return data;
 }
 
+// "1:05", or "1:02:05" for very long matches.
+function formatDuration(totalSeconds) {
+  const seconds = Math.max(0, Math.round(totalSeconds));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const rest = String(seconds % 60).padStart(2, "0");
+  return hours ? `${hours}:${String(minutes).padStart(2, "0")}:${rest}` : `${minutes}:${rest}`;
+}
+
+// Server timestamps are Unix seconds; show them as local clock time.
+function formatClockTime(unixSeconds) {
+  return new Date(unixSeconds * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function describeResult(result) {
+  const outcome = result.winner ? `${result.winner} won` : "Draw";
+  return `${outcome} · ${result.players} players · ${formatDuration(result.duration_seconds)}`;
+}
+
+// Stats shared by the room list and the in-room panel.
+function roomStatsLines(room) {
+  const lines = [`Created ${formatClockTime(room.created_at)}`];
+  if (room.phase === "playing" && room.match_seconds != null) {
+    lines.push(`Match running ${formatDuration(room.match_seconds)}`);
+  }
+  if (room.matches_played) {
+    lines.push(`${room.matches_played} ${room.matches_played === 1 ? "match" : "matches"} played`);
+  }
+  if (room.last_result) lines.push(`Last match: ${describeResult(room.last_result)}`);
+  return lines;
+}
+
+const PHASE_LABELS = { lobby: "Waiting", playing: "Playing", finished: "Finished" };
+
+function playerName() {
+  const input = document.querySelector("#player-name");
+  const name = input.value.trim();
+  if (!name) {
+    status.textContent = "Enter your name first.";
+    input.focus();
+  }
+  return name;
+}
+
+async function joinFromList(roomId, spectate) {
+  const name = playerName();
+  if (!name) return;
+  try {
+    await joinRoom(roomId, name, spectate);
+  } catch (error) {
+    status.textContent = error.message;
+    refreshRooms();
+  }
+}
+
+function roomCard(room) {
+  const item = document.createElement("li");
+  item.className = "room-card";
+  const info = document.createElement("div");
+  info.className = "room-info";
+  const title = document.createElement("strong");
+  title.textContent = `Room ${room.id} `;
+  const phase = document.createElement("span");
+  phase.className = `room-phase phase-${room.phase}`;
+  phase.textContent = PHASE_LABELS[room.phase] ?? room.phase;
+  title.append(phase);
+  const details = document.createElement("small");
+  details.textContent = [
+    `${room.players}/${room.max_players} players`,
+    ...(room.spectators ? [`${room.spectators} watching`] : []),
+    `${room.width}×${room.height}`,
+    `${room.soft_block_count} crates (${room.soft_block_percentage.toFixed(1)}%)`,
+  ].join(" · ");
+  const stats = document.createElement("small");
+  stats.textContent = roomStatsLines(room).join(" · ");
+  info.append(title, details, stats);
+
+  const actions = document.createElement("div");
+  actions.className = "room-actions";
+  // A seat is only free before the match starts and while slots remain.
+  if (room.phase === "lobby" && room.players < room.max_players) {
+    const join = document.createElement("button");
+    join.type = "button";
+    join.textContent = "Join";
+    join.addEventListener("click", () => joinFromList(room.id, false));
+    actions.append(join);
+  }
+  const watch = document.createElement("button");
+  watch.type = "button";
+  watch.className = "secondary";
+  watch.textContent = "Watch";
+  watch.addEventListener("click", () => joinFromList(room.id, true));
+  actions.append(watch);
+  item.append(info, actions);
+  return item;
+}
+
 async function refreshRooms() {
   try {
     const rooms = await request("/api/rooms");
     const list = document.querySelector("#rooms");
-    list.replaceChildren();
-    for (const room of rooms) {
-      const item = document.createElement("li");
-      item.textContent = `${room.id} · ${room.players}/${room.max_players} players · ${room.width}×${room.height} · ${room.soft_block_count} crates (${room.soft_block_percentage.toFixed(1)}%)`;
-      list.append(item);
-    }
+    list.replaceChildren(...rooms.map(roomCard));
     if (!rooms.length) {
       const item = document.createElement("li");
+      item.className = "room-empty";
       item.textContent = "No open rooms right now.";
       list.append(item);
     }
@@ -78,10 +171,10 @@ function isCreator() {
   return Boolean(session && gameState && gameState.creator_id === session.member_id);
 }
 
-async function joinRoom(roomId, inviteCode, name) {
+async function joinRoom(roomId, name, spectate = false) {
   session = await request(`/api/rooms/${encodeURIComponent(roomId)}/join`, {
     method: "POST",
-    body: JSON.stringify({ name, invite_code: inviteCode || null }),
+    body: JSON.stringify({ name, spectate }),
   });
   session.name = name;
   saveSession();
@@ -197,6 +290,7 @@ function handleMessage(message) {
   }
   document.querySelector("#room-meta").textContent =
     `${gameState.width}×${gameState.height} · ${gameState.players.length}/${gameState.player_limit} players · ${gameState.spectator_count} spectators · ${gameState.soft_block_count} crates`;
+  document.querySelector("#room-stats").textContent = roomStatsLines(gameState).join(" · ");
   render();
 }
 
@@ -254,19 +348,13 @@ document.querySelector("#create-form").addEventListener("submit", async (event) 
     const room = await request("/api/rooms", {
       method: "POST",
       body: JSON.stringify({
-        private: document.querySelector("#private-room").checked,
         arena_size: Number(document.querySelector("#arena-size").value),
         player_limit: Number(document.querySelector("#player-limit").value),
         soft_block_percentage: Number(softBlockPercentage.value),
       }),
     });
     document.querySelector("#room-id").value = room.room_id;
-    if (room.invite_code) document.querySelector("#invite-code").value = room.invite_code;
-    await joinRoom(room.room_id, room.invite_code, document.querySelector("#player-name").value || "Player");
-    if (room.invite_code) {
-      // Shown after entering the room so other players can be invited.
-      status.textContent = `Private room created. Invite code: ${room.invite_code}`;
-    }
+    await joinRoom(room.room_id, document.querySelector("#player-name").value.trim() || "Player");
   } catch (error) {
     status.textContent = error.message;
   }
@@ -277,7 +365,6 @@ document.querySelector("#join-form").addEventListener("submit", async (event) =>
   try {
     await joinRoom(
       document.querySelector("#room-id").value.trim(),
-      document.querySelector("#invite-code").value.trim(),
       document.querySelector("#player-name").value.trim(),
     );
   } catch (error) {

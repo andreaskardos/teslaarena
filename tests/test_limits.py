@@ -47,7 +47,7 @@ def test_room_creation_is_limited_per_client() -> None:
     client = TestClient(app)
 
     statuses = [
-        client.post("/api/rooms", json={"private": False}).status_code
+        client.post("/api/rooms", json={}).status_code
         for _ in range(6)
     ]
 
@@ -57,39 +57,33 @@ def test_room_creation_is_limited_per_client() -> None:
 def test_joins_are_limited_per_client() -> None:
     rooms.rooms.clear()
     client = TestClient(app)
-    room_id = client.post(
-        "/api/rooms", json={"private": True}
-    ).json()["room_id"]
-
-    statuses = {
-        client.post(
-            f"/api/rooms/{room_id}/join", json={"name": "X", "invite_code": "bad"}
-        ).status_code
+    statuses = [
+        client.post("/api/rooms/NOROOM/join", json={"name": "X"}).status_code
         for _ in range(31)
-    }
+    ]
 
-    assert statuses == {403, 429}
+    assert statuses == [404] * 30 + [429]
 
 
 def test_server_wide_room_and_spectator_caps(monkeypatch) -> None:
     monkeypatch.setattr(rooms_module, "MAX_ROOMS", 1)
     monkeypatch.setattr(rooms_module, "MAX_SPECTATORS_PER_ROOM", 1)
     manager = RoomManager()
-    room, _ = manager.create_room(private=False)
+    room = manager.create_room()
     with pytest.raises(RoomLimitError):
-        manager.create_room(private=False)
+        manager.create_room()
 
-    _, host_id, token, _ = manager.join_room(room.id, "Host", None)
+    _, host_id, token, _ = manager.join_room(room.id, "Host")
     manager.start_room(room.id, host_id, token)
-    manager.join_room(room.id, "Viewer", None)
+    manager.join_room(room.id, "Viewer")
     with pytest.raises(GameError, match="spectator places"):
-        manager.join_room(room.id, "Another", None)
+        manager.join_room(room.id, "Another")
 
 
 def test_flooding_actions_are_dropped_with_a_warning() -> None:
     rooms.rooms.clear()
     with TestClient(app) as client:
-        room_id = client.post("/api/rooms", json={"private": False}).json()["room_id"]
+        room_id = client.post("/api/rooms", json={}).json()["room_id"]
         host = client.post(f"/api/rooms/{room_id}/join", json={"name": "Host"}).json()
         url = f"{host['websocket_path']}?token={host['token']}"
         with client.websocket_connect(url) as websocket:
@@ -110,7 +104,7 @@ def test_flooding_actions_are_dropped_with_a_warning() -> None:
 def test_oversized_messages_close_the_connection() -> None:
     rooms.rooms.clear()
     with TestClient(app) as client:
-        room_id = client.post("/api/rooms", json={"private": False}).json()["room_id"]
+        room_id = client.post("/api/rooms", json={}).json()["room_id"]
         host = client.post(f"/api/rooms/{room_id}/join", json={"name": "Host"}).json()
         url = f"{host['websocket_path']}?token={host['token']}"
         with client.websocket_connect(url) as websocket:

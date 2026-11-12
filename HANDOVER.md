@@ -6,7 +6,7 @@ Updated: 2026-11-11
 
 - Repository: `andreaskardos/kronsmash`, branch `master`.
 - Use `git --no-pager log -5 --oneline` for the latest commit.
-- The game supports public/private rooms, arenas up to 45×45, up to 12 players, configurable crate density, Tesla coils and power-ups.
+- The game supports listed rooms with Join/Watch buttons and match stats, arenas up to 45×45, up to 8 players, configurable crate density, Tesla coils and power-ups.
 - Each room runs one game loop (20 ticks per second) that sends state only when it changes.
 - The room creator starts the match. AI bots (easy, medium, hard) can be added in the lobby; a creator who starts alone gets three automatically. Late arrivals can only spectate.
 - Dropped players have 15 seconds to reconnect; the creator can start a rematch when a match ends; empty rooms are deleted.

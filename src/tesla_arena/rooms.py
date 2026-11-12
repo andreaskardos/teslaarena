@@ -5,14 +5,15 @@ import secrets
 import time
 from dataclasses import dataclass, field
 from hmac import compare_digest
+from typing import Literal
 
 from starlette.websockets import WebSocket
 
 from tesla_arena.bots import BOT_LINEUP, BOT_SKILLS, Bot, bot_name, next_bot_name
 from tesla_arena.game import (
     DEFAULT_ARENA_SIZE,
+    DEFAULT_PLAYER_LIMIT,
     DEFAULT_SOFT_BLOCK_PERCENTAGE,
-    MAX_PLAYERS,
     GameError,
     GameState,
     Player,
@@ -32,13 +33,35 @@ class RoomLimitError(GameError):
 
 
 @dataclass
+class MatchResult:
+    winner: str | None
+    """The winner's name, or None for a draw."""
+    players: int
+    duration_seconds: float
+    ended_at: float
+    """Wall-clock time (Unix seconds) when the match ended."""
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "winner": self.winner,
+            "players": self.players,
+            "duration_seconds": round(self.duration_seconds),
+            "ended_at": self.ended_at,
+        }
+
+
+@dataclass
 class Room:
     id: str
-    private: bool
-    invite_code: str | None
     game: GameState
     creator_id: str | None = None
     started: bool = False
+    created_at: float = field(default_factory=time.time)
+    """Wall-clock time (Unix seconds) when the room was created."""
+    match_started_at: float | None = None
+    """Monotonic time when the current match started."""
+    last_result: MatchResult | None = None
+    matches_played: int = 0
     player_tokens: dict[str, str] = field(default_factory=dict)
     spectator_tokens: dict[str, str] = field(default_factory=dict)
     spectator_names: dict[str, str] = field(default_factory=dict)
@@ -48,6 +71,8 @@ class Room:
     """Members (players or spectators) who may still reconnect, by drop time."""
     empty_since: float = field(default_factory=time.monotonic)
     loop_task: asyncio.Task[None] | None = None
+    result_recorded: bool = False
+    """Whether the current match's result is already in ``last_result``."""
     last_state_message: str | None = None
     _next_spectator_id: int = 1
 
@@ -59,13 +84,66 @@ class Room:
             return "finished"
         return "playing"
 
+    @property
+    def current_result(self) -> MatchResult | None:
+        """The result of the current match once it has finished."""
+        if self.phase != "finished" or not self.result_recorded:
+            return None
+        return self.last_result
+
+    def record_result(self, now: float | None = None) -> None:
+        """Store the outcome of the current match once, when it has finished."""
+        if (
+            self.phase != "finished"
+            or self.match_started_at is None
+            or self.result_recorded
+        ):
+            return
+        now = time.monotonic() if now is None else now
+        living = [player for player in self.game.players.values() if player.alive]
+        winner = living[0].name if len(living) == 1 else None
+        self.last_result = MatchResult(
+            winner=winner,
+            players=len(self.game.players),
+            duration_seconds=max(0.0, now - self.match_started_at),
+            ended_at=time.time(),
+        )
+        self.matches_played += 1
+        self.result_recorded = True
+
+    def start_match(self, now: float | None = None) -> None:
+        self.started = True
+        self.match_started_at = time.monotonic() if now is None else now
+        self.result_recorded = False
+
+    def match_seconds(self, now: float | None = None) -> int | None:
+        """Seconds played in the current match, frozen once it has finished."""
+        if self.match_started_at is None:
+            return None
+        result = self.current_result
+        if result is not None:
+            return round(result.duration_seconds)
+        now = time.monotonic() if now is None else now
+        return round(max(0.0, now - self.match_started_at))
+
+    def stats(self) -> dict[str, object]:
+        """Room history that does not change every second."""
+        return {
+            "created_at": self.created_at,
+            "matches_played": self.matches_played,
+            "last_result": self.last_result.as_dict() if self.last_result else None,
+        }
+
     def public_info(self) -> dict[str, object]:
+        self.record_result()
         return {
             "id": self.id,
             "players": len(self.game.players),
             "max_players": self.game.player_limit,
             "spectators": len(self.spectator_names),
             "phase": self.phase,
+            "match_seconds": self.match_seconds() if self.phase == "playing" else None,
+            **self.stats(),
             "width": self.game.width,
             "height": self.game.height,
             "soft_block_count": self.game.soft_block_count,
@@ -79,23 +157,19 @@ class RoomManager:
 
     def create_room(
         self,
-        private: bool,
         soft_block_count: int | None = None,
         *,
         arena_size: int = DEFAULT_ARENA_SIZE,
-        player_limit: int = MAX_PLAYERS,
+        player_limit: int = DEFAULT_PLAYER_LIMIT,
         soft_block_percentage: float = DEFAULT_SOFT_BLOCK_PERCENTAGE,
-    ) -> tuple[Room, str | None]:
+    ) -> Room:
         if len(self.rooms) >= MAX_ROOMS:
             raise RoomLimitError("The server is full. Try again later.")
         room_id = secrets.token_hex(3).upper()
         while room_id in self.rooms:
             room_id = secrets.token_hex(3).upper()
-        invite_code = secrets.token_urlsafe(6) if private else None
         room = Room(
             id=room_id,
-            private=private,
-            invite_code=invite_code,
             game=GameState.create(
                 width=arena_size,
                 height=arena_size,
@@ -107,16 +181,20 @@ class RoomManager:
             ),
         )
         self.rooms[room.id] = room
-        return room, invite_code
+        return room
 
     def join_room(
         self,
         room_id: str,
         name: str,
-        invite_code: str | None,
         now: float | None = None,
-    ) -> tuple[Room, str, str, str]:
-        """Join as a player, or as a spectator once the match has started.
+        *,
+        as_spectator: bool = False,
+    ) -> tuple[Room, str, str, Literal["creator", "player", "spectator"]]:
+        """Join as a player, or as a spectator.
+
+        Members join as spectators when they ask to, or once the match has
+        started.
 
         The member must connect within the reconnect grace period or lose
         their place, so abandoned joins do not hold player slots.
@@ -125,14 +203,8 @@ class RoomManager:
         room = self.rooms.get(room_id.upper())
         if room is None:
             raise GameError("Room not found.")
-        if room.private and (
-            invite_code is None
-            or room.invite_code is None
-            or not compare_digest(invite_code, room.invite_code)
-        ):
-            raise PermissionError("A valid invitation code is required.")
         token = secrets.token_urlsafe(24)
-        if room.started:
+        if as_spectator or room.started:
             clean_name = name.strip()
             if not clean_name or len(clean_name) > 20:
                 raise GameError("Player name must be between 1 and 20 characters.")
@@ -148,7 +220,7 @@ class RoomManager:
         player = room.game.join_player(name)
         room.player_tokens[player.id] = token
         room.disconnected_at[player.id] = now
-        role = "player"
+        role: Literal["creator", "player", "spectator"] = "player"
         if room.creator_id is None:
             room.creator_id = player.id
             role = "creator"
@@ -160,7 +232,7 @@ class RoomManager:
             raise PermissionError("Only the room creator can start the match.")
         if len(room.game.players) == 1:
             self._add_lineup(room)
-        room.started = True
+        room.start_match()
         return room
 
     def rematch(self, room_id: str, token: str) -> Room:
@@ -168,8 +240,10 @@ class RoomManager:
         room = self._room_for_creator(room_id, token, "start a rematch")
         if room.phase != "finished":
             raise GameError("The match is not over yet.")
+        room.record_result()
         room.game = room.game.rematch()
         room.started = False
+        room.match_started_at = None
         for bot in room.bots.values():
             bot.next_think_at = 0
         return room
@@ -285,8 +359,4 @@ class RoomManager:
         return player
 
     def public_rooms(self) -> list[dict[str, object]]:
-        return [
-            room.public_info()
-            for room in self.rooms.values()
-            if not room.private
-        ]
+        return [room.public_info() for room in self.rooms.values()]
