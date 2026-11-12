@@ -41,6 +41,7 @@ body.in-game #lobby { display: none; }
 
 header p { margin: 0; }
 h1 { margin: 6px 0 10px; font-size: 2.6rem; line-height: 1; letter-spacing: -0.05em; }
+h1 .domain { margin-left: 2px; color: #55d9ff; font-size: 0.42em; letter-spacing: 0; }
 h2 { margin: 0 0 12px; }
 h3 { margin: 0 0 10px; }
 p { color: #aab8d2; }
