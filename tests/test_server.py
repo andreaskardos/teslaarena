@@ -1,8 +1,11 @@
 import asyncio
 
+import pytest
 from fastapi.testclient import TestClient
 
-from tesla_arena.server import _broadcast, app, rooms
+from tesla_arena import rooms as rooms_module
+from tesla_arena.game import GameError
+from tesla_arena.server import GameAction, _apply_action, _broadcast, app, rooms
 
 
 def test_lobby_room_http_flow() -> None:
@@ -333,3 +336,26 @@ def test_creator_manages_bots_over_http() -> None:
     )
     assert add(host["token"]).status_code == 409
     assert len(rooms.rooms[room_id].game.players) == 3
+
+
+def test_players_cannot_act_during_the_countdown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(rooms_module, "COUNTDOWN_SECONDS", 3.0)
+    room = rooms.create_room()
+    try:
+        _, host_id, token, _ = rooms.join_room(room.id, "Host")
+        rooms.join_room(room.id, "Guest")
+        rooms.start_room(room.id, host_id, token)
+
+        assert room.phase == "countdown"
+        with pytest.raises(GameError, match="not started yet"):
+            _apply_action(room, host_id, False, GameAction(type="place_coil"))
+        assert not room.game.coils
+
+        room.match_started_at -= 3  # let the countdown run out
+        assert room.phase == "playing"
+        _apply_action(room, host_id, False, GameAction(type="place_coil"))
+        assert len(room.game.coils) == 1
+    finally:
+        rooms.rooms.pop(room.id, None)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import secrets
 import time
 from dataclasses import dataclass, field
@@ -23,6 +24,8 @@ from tesla_arena.game import (
 DISCONNECT_GRACE_SECONDS = 15.0
 # How long a room without any members is kept before it is deleted.
 EMPTY_ROOM_SECONDS = 30.0
+# Seconds between the creator pressing Start and players being able to act.
+COUNTDOWN_SECONDS = 3.0
 # Caps that keep one server's memory use bounded.
 MAX_ROOMS = 200
 MAX_SPECTATORS_PER_ROOM = 50
@@ -59,7 +62,7 @@ class Room:
     created_at: float = field(default_factory=time.time)
     """Wall-clock time (Unix seconds) when the room was created."""
     match_started_at: float | None = None
-    """Monotonic time when the current match started."""
+    """Monotonic time when the current match starts, after its countdown."""
     last_result: MatchResult | None = None
     matches_played: int = 0
     player_tokens: dict[str, str] = field(default_factory=dict)
@@ -80,6 +83,8 @@ class Room:
     def phase(self) -> str:
         if not self.started:
             return "lobby"
+        if self.countdown_seconds() is not None:
+            return "countdown"
         if sum(player.alive for player in self.game.players.values()) <= 1:
             return "finished"
         return "playing"
@@ -112,9 +117,19 @@ class Room:
         self.result_recorded = True
 
     def start_match(self, now: float | None = None) -> None:
+        """Start the match once a countdown of ``COUNTDOWN_SECONDS`` has run."""
         self.started = True
-        self.match_started_at = time.monotonic() if now is None else now
+        now = time.monotonic() if now is None else now
+        self.match_started_at = now + COUNTDOWN_SECONDS
         self.result_recorded = False
+
+    def countdown_seconds(self, now: float | None = None) -> int | None:
+        """Whole seconds left before the match starts, or None if not counting down."""
+        if not self.started or self.match_started_at is None:
+            return None
+        now = time.monotonic() if now is None else now
+        remaining = self.match_started_at - now
+        return math.ceil(remaining) if remaining > 0 else None
 
     def match_seconds(self, now: float | None = None) -> int | None:
         """Seconds played in the current match, frozen once it has finished."""

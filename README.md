@@ -73,8 +73,9 @@ For the development roadmap and steps to resume work in a new session, see
   simultaneous Tesla coil slot for that player during the match.
 - Speed Up can drop from destroyed blocks and lets its collector move one tile
   every 0.12 seconds instead of the usual 0.2 seconds.
-- The room creator starts the match. Game actions are disabled in the lobby;
-  anyone joining after the match starts is an observer and cannot control a
+- The room creator starts the match. A 3-second countdown then runs on the
+  arena before anyone, bots included, can move. Game actions are disabled in
+  the lobby and during the countdown; anyone joining after the match starts is an observer and cannot control a
   player.
 - Before the match, the creator can add AI bots of any skill (easy, medium or
   hard) alongside human players, or remove them again. Bots take player slots.

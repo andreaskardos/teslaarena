@@ -113,6 +113,7 @@ button.secondary { color: #d7e1f4; background: #2b3a56; }
 .room-actions { display: flex; gap: 8px; }
 .room-phase { margin-left: 6px; padding: 2px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 700; vertical-align: middle; }
 .phase-lobby { color: #06121d; background: #9cf276; }
+.phase-countdown { color: #06121d; background: #79d7ff; }
 .phase-playing { color: #06121d; background: #ffca62; }
 .phase-finished { color: #d7e1f4; background: #2b3a56; }
 .room-empty { color: #8f9db5; }

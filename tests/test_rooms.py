@@ -1,5 +1,6 @@
 import pytest
 
+from tesla_arena import rooms
 from tesla_arena.rooms import RoomManager
 
 
@@ -89,3 +90,20 @@ def test_finished_match_records_winner_and_duration() -> None:
     manager.rematch(room.id, host_token)
     assert room.match_seconds() is None
     assert manager.public_rooms()[0]["last_result"]["winner"] == "Host"
+
+
+def test_match_counts_down_before_it_starts(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(rooms, "COUNTDOWN_SECONDS", 3.0)
+    room = RoomManager().create_room()
+    room.game.join_player("Host")
+    room.game.join_player("Guest")
+
+    room.start_match(now=100.0)
+
+    assert room.started
+    assert room.countdown_seconds(now=100.0) == 3
+    assert room.countdown_seconds(now=101.5) == 2
+    assert room.countdown_seconds(now=102.9) == 1
+    assert room.countdown_seconds(now=103.0) is None
+    assert room.match_seconds(now=101.0) == 0
+    assert room.match_seconds(now=105.0) == 2

@@ -311,6 +311,8 @@ def _apply_action(
         raise GameError("Spectators cannot control the match.")
     if not room.started:
         raise GameError("The room creator has not started the match.")
+    if room.phase == "countdown":
+        raise GameError("The match has not started yet.")
     now = time.monotonic()
     room.game.tick(now)
     if action.type == "move":
@@ -369,6 +371,8 @@ def _state_message(room: Room) -> str:
             # Whole seconds, so a running match adds at most one update a second.
             "match_seconds": room.match_seconds(),
             "phase": room.phase,
+            # Whole seconds, so the countdown adds one update a second.
+            "countdown_seconds": room.countdown_seconds(),
             "creator_id": room.creator_id,
             "spectator_count": len(room.spectator_names),
             "spectators": list(room.spectator_names.values()),

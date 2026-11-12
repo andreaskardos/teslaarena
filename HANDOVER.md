@@ -8,7 +8,7 @@ Updated: 2026-11-11
 - Use `git --no-pager log -5 --oneline` for the latest commit.
 - The game supports listed rooms with Join/Watch buttons and match stats, arenas up to 45×45, up to 8 players, configurable crate density, Tesla coils and power-ups.
 - Each room runs one game loop (20 ticks per second) that sends state only when it changes.
-- The room creator starts the match. AI bots (easy, medium, hard) can be added in the lobby; a creator who starts alone gets three automatically. Late arrivals can only spectate.
+- The room creator starts the match, which begins after a 3-second countdown (phase `countdown`, `COUNTDOWN_SECONDS` in `rooms.py`; tests set it to 0 in `conftest.py`). AI bots (easy, medium, hard) can be added in the lobby; a creator who starts alone gets three automatically. Late arrivals can only spectate.
 - Dropped players have 15 seconds to reconnect; the creator can start a rematch when a match ends; empty rooms are deleted.
 - Remote Control allows its owner to trigger their coils with **R** or the in-game button.
 - Requests are rate limited per IP (5 rooms and 30 joins per minute) and per connection (20 actions per second); the server holds at most 200 rooms and 50 spectators per room.

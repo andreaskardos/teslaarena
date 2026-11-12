@@ -58,7 +58,7 @@ function roomStatsLines(room) {
   return lines;
 }
 
-const PHASE_LABELS = { lobby: "Waiting", playing: "Playing", finished: "Finished" };
+const PHASE_LABELS = { lobby: "Waiting", countdown: "Starting", playing: "Playing", finished: "Finished" };
 
 function playerName() {
   const input = document.querySelector("#player-name");
@@ -276,6 +276,10 @@ function handleMessage(message) {
         ? `Waiting for players (1/${gameState.player_limit}). Add AI bots, wait for more players, or start alone against bots of different skill levels.`
         : `Waiting for players (${gameState.players.length}/${gameState.player_limit}). You start the match.`
       : `Waiting for the host to start (${gameState.players.length}/${gameState.player_limit}).`;
+  } else if (phase === "countdown") {
+    gameStatus.textContent = session.role === "spectator"
+      ? `The match starts in ${gameState.countdown_seconds}…`
+      : `Get ready! The match starts in ${gameState.countdown_seconds}…`;
   } else if (phase === "finished") {
     const outcome = gameState.winner_id ? "The match is over." : "Draw – nobody survived.";
     if (!gameState.winner_id) status.textContent = outcome;
@@ -446,6 +450,7 @@ function render() {
     }
   }
   drawLightning(gameState.lightning || [], cellSize);
+  if (gameState.phase === "countdown") drawCountdown(gameState.countdown_seconds);
   const playerList = document.querySelector("#players");
   playerList.replaceChildren();
   for (const player of gameState.players) {
@@ -502,6 +507,20 @@ function render() {
     const winner = gameState.players.find((player) => player.id === gameState.winner_id);
     status.textContent = `${winner.name} won the match!`;
   }
+}
+
+function drawCountdown(seconds) {
+  context.fillStyle = "rgba(6, 18, 29, 0.55)";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  const size = Math.round(Math.min(canvas.width, canvas.height) * 0.4);
+  context.font = `bold ${size}px sans-serif`;
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.lineWidth = Math.max(4, size / 16);
+  context.strokeStyle = "#06121d";
+  context.strokeText(String(seconds), canvas.width / 2, canvas.height / 2);
+  context.fillStyle = "#ffca62";
+  context.fillText(String(seconds), canvas.width / 2, canvas.height / 2);
 }
 
 function drawPowerups(powerups, size) {
