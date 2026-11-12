@@ -244,7 +244,9 @@ function handleMessage(message) {
     return;
   }
   if (message.type !== "state") return;
+  const previousState = gameState;
   gameState = message.state;
+  Sounds.onState(previousState, gameState, session.member_id);
   const creator = isCreator();
   const phase = gameState.phase;
   if (previousPhase === "finished" && phase === "lobby") {
@@ -379,7 +381,24 @@ const directions = {
   ArrowRight: "right", d: "right", D: "right",
 };
 
+const soundButton = document.querySelector("#sound-button");
+function updateSoundButton() {
+  const muted = Sounds.isMuted();
+  soundButton.textContent = muted ? "Sound off (M)" : "Sound on (M)";
+  soundButton.setAttribute("aria-pressed", String(muted));
+}
+function toggleSound() {
+  Sounds.setMuted(!Sounds.isMuted());
+  updateSoundButton();
+}
+soundButton.addEventListener("click", toggleSound);
+updateSoundButton();
+
 window.addEventListener("keydown", (event) => {
+  if ((event.key === "m" || event.key === "M") && session && event.target.tagName !== "INPUT") {
+    toggleSound();
+    return;
+  }
   if (!session || socket?.readyState !== WebSocket.OPEN) return;
   if (session.role === "spectator" || gameState?.phase !== "playing") return;
   const localPlayer = gameState.players.find((player) => player.id === session.member_id);
