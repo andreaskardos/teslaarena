@@ -13,9 +13,20 @@ from tesla_arena.server import app, rooms
 CONNECTED = object()  # Stands in for a WebSocket in room-level tests.
 
 
+def _fixed_start(room: Room) -> float:
+    """Pin the room's clock to a whole number so time arithmetic is exact.
+
+    Tests add whole seconds to this; starting from the real monotonic clock
+    (e.g. 123.717 seconds after boot) can make (start + 16) - (start + 1)
+    come out a hair under 15 and miss a grace period on some machines.
+    """
+    room.empty_since = 1000.0
+    return room.empty_since
+
+
 def _room_with(manager: RoomManager, *names: str, player_limit: int = 8):
     room = manager.create_room(player_limit=player_limit)
-    start = room.empty_since
+    start = _fixed_start(room)
     members = []
     for name in names:
         _, member_id, token, _ = manager.join_room(room.id, name, now=start)
@@ -37,7 +48,7 @@ def disconnect(manager: RoomManager, room: Room, member_id: str, now: float) -> 
 def test_join_without_connecting_frees_the_slot_after_the_grace_period() -> None:
     manager = RoomManager()
     room = manager.create_room()
-    start = room.empty_since
+    start = _fixed_start(room)
     manager.join_room(room.id, "Ghost", now=start)
 
     assert manager.sweep(start + DISCONNECT_GRACE_SECONDS - 1) == []
