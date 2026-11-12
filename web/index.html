@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tesla Arena</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <div class="layout">
+      <aside class="sidebar sidebar-left">
+        <header>
+          <h1>Tesla Arena<span class="domain">.mine.nu</span></h1>
+          <p class="tagline">Up to 8 players. Place Tesla coils, survive the lightning and be the last one standing.</p>
+        </header>
+        <p id="status" role="status">Enter a name, then create or join a room.</p>
+        <section id="room-panel" class="panel in-game-only">
+          <h2 id="room-title"></h2>
+          <p id="room-meta"></p>
+          <p id="room-stats" class="room-stats"></p>
+          <p id="game-status" class="game-status"></p>
+          <div class="game-actions">
+            <button id="start-button" class="hidden">Start match</button>
+            <button id="rematch-button" class="hidden">Play again</button>
+            <button id="remote-button" class="secondary hidden">Detonate coils (R)</button>
+            <button id="sound-button" class="secondary" type="button" aria-pressed="false">Sound on (M)</button>
+            <button id="leave-button" class="secondary">Leave room</button>
+          </div>
+          <div id="bot-controls" class="bot-controls hidden">
+            <label for="bot-skill">AI bot</label>
+            <select id="bot-skill">
+              <option value="easy">Easy</option>
+              <option value="medium" selected>Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+            <button id="add-bot-button" class="secondary" type="button">Add bot</button>
+          </div>
+        </section>
+        <section class="panel controls-help in-game-only">
+          <h3>Controls</h3>
+          <dl>
+            <dt>Move</dt><dd>Arrow keys or WASD</dd>
+            <dt>Place Tesla coil</dt><dd>Space</dd>
+            <dt>Kick</dt><dd>Walk into a coil (with Kick)</dd>
+            <dt>Remote Control</dt><dd>R</dd>
+            <dt>Mute sound</dt><dd>M</dd>
+          </dl>
+        </section>
+      </aside>
+
+      <main class="stage">
+        <section id="lobby" class="panel">
+          <div class="name-field">
+            <label for="player-name">Your name</label>
+            <input id="player-name" placeholder="Your name" maxlength="20" required autocomplete="nickname">
+          </div>
+          <h2 class="lobby-divider">Create game</h2>
+          <form id="create-form">
+            <label for="arena-size">Arena size</label>
+            <select id="arena-size">
+              <option value="25">Small · 25×25</option>
+              <option value="35" selected>Medium · 35×35</option>
+              <option value="45">Large · 45×45</option>
+            </select>
+            <label for="player-limit">Player slots</label>
+            <select id="player-limit">
+              <option value="2">2 players</option>
+              <option value="3">3 players</option>
+              <option value="4" selected>4 players</option>
+              <option value="5">5 players</option>
+              <option value="6">6 players</option>
+              <option value="7">7 players</option>
+              <option value="8">8 players</option>
+            </select>
+            <label for="soft-block-percentage">Crates: <output id="soft-block-value">65.0%</output></label>
+            <input id="soft-block-percentage" type="range" min="0" max="100" step="0.1" value="65">
+            <small class="form-hint">Counted from playable tiles after spawn zones are reserved.</small>
+            <label for="time-limit">Match timer</label>
+            <input id="time-limit" class="time-input" value="03:00" placeholder="mm:ss"
+              pattern="\d{1,2}(:[0-5]\d)?" maxlength="5" aria-describedby="time-limit-hint">
+            <small id="time-limit-hint" class="form-hint">When it reaches 00:00 the arena closes in over one minute, in a spiral from the top-left corner. Anyone caught is out. Leave empty for no timer.</small>
+            <button type="submit">Create room</button>
+          </form>
+          <h2 class="lobby-divider">Open rooms</h2>
+          <p class="form-hint">Pick a room to join or watch.</p>
+          <ul id="rooms"></ul>
+        </section>
+        <section id="game" class="in-game-only">
+          <div id="match-timer" class="match-timer hidden" role="timer" aria-live="off"></div>
+          <canvas id="arena" aria-label="Arena"></canvas>
+        </section>
+      </main>
+
+      <aside class="sidebar sidebar-right in-game-only">
+        <section class="panel">
+          <h2>Players</h2>
+          <ul id="players"></ul>
+          <h3 id="spectator-heading" class="hidden">Spectators</h3>
+          <ul id="spectators"></ul>
+        </section>
+      </aside>
+    </div>
+    <dialog id="game-over" aria-labelledby="game-over-title">
+      <canvas id="fireworks" aria-hidden="true"></canvas>
+      <div id="game-over-card" class="game-over-card" tabindex="-1">
+        <div id="game-over-trophy" class="game-over-trophy" aria-hidden="true"></div>
+        <p class="eyebrow">GAME OVER</p>
+        <h2 id="game-over-title"></h2>
+        <p id="game-over-text"></p>
+        <p id="game-over-time" class="game-over-time"></p>
+        <div class="game-over-actions">
+          <button id="game-over-rematch" type="button">Play again</button>
+          <button id="game-over-close" class="secondary" type="button">Close</button>
+        </div>
+      </div>
+    </dialog>
+    <script src="/sounds.js" defer></script>
+    <script src="/gameover.js" defer></script>
+    <script src="/game.js" defer></script>
+  </body>
+</html>

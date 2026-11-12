@@ -1,0 +1,169 @@
+import random
+
+import pytest
+
+from tesla_arena.bots import BOT_SKILLS, Bot, danger_map
+from tesla_arena.game import GameError, GameState
+from tesla_arena.rooms import RoomManager
+
+
+def _solo_room(player_limit: int):
+    manager = RoomManager()
+    room = manager.create_room(player_limit=player_limit)
+    _, host_id, token, _ = manager.join_room(room.id, "Solo")
+    manager.start_room(room.id, host_id, token)
+    return room
+
+
+@pytest.mark.parametrize(
+    ("player_limit", "skills"),
+    [
+        (8, ["easy", "medium", "hard"]),
+        (3, ["easy", "hard"]),
+        (2, ["medium"]),
+    ],
+)
+def test_lone_creator_gets_bots_with_different_skills(player_limit, skills) -> None:
+    room = _solo_room(player_limit)
+
+    bots = [player for player in room.game.players.values() if player.bot_skill]
+    assert room.started
+    assert [bot.bot_skill for bot in bots] == skills
+    assert set(room.bots) == {bot.id for bot in bots}
+    assert len({bot.name for bot in bots}) == len(bots)
+    assert not room.player_tokens.keys() & room.bots.keys()
+
+
+def _arena_with_bot(skill: str) -> tuple[GameState, Bot]:
+    game = GameState.create(width=11, height=11, player_limit=2, soft_block_count=0)
+    player = game.join_player("Bot")
+    game.join_player("Idle")
+    return game, Bot(player.id, BOT_SKILLS[skill], random.Random(1))
+
+
+def _simulate(game: GameState, bot: Bot, seconds: float, start: float = 0) -> None:
+    now = start
+    while now < start + seconds:
+        bot.act(game, now)
+        game.tick(now)
+        now += 0.05
+
+
+def test_hard_bot_escapes_its_own_coil() -> None:
+    game, bot = _arena_with_bot("hard")
+    game.place_coil(bot.player_id, now=0)
+
+    _simulate(game, bot, seconds=3)
+
+    assert not game.coils, "the coil should have exploded"
+    assert game.players[bot.player_id].alive
+
+
+def test_hard_bot_does_not_place_a_coil_without_an_escape() -> None:
+    game, bot = _arena_with_bot("hard")
+    player = game.players[bot.player_id]
+    # Box the bot into its corner spawn with soft blocks it would like to hit.
+    for dx, dy in ((1, 0), (0, 1)):
+        game.soft_blocks.add((player.x + dx, player.y + dy))
+
+    _simulate(game, bot, seconds=1)
+
+    assert not game.coils
+    assert player.alive
+
+
+def test_only_hard_bots_foresee_chain_reactions() -> None:
+    game, bot = _arena_with_bot("hard")
+    owner = game.players[bot.player_id]
+    owner.coil_capacity = 2
+    owner.x, owner.y = (5, 5)
+    game.place_coil(owner.id, now=0)
+    owner.x, owner.y = (5, 7)
+    game.place_coil(owner.id, now=0)
+    game.coils[1].explodes_at = 0.5
+    game.coils[2].explodes_at = 2.5
+    owner.x, owner.y = (1, 1)
+    beyond_second_coil = (5, 9)
+
+    hard = danger_map(game, 0, "observer", chains=True)
+    medium = danger_map(game, 0, "observer", chains=False)
+
+    assert hard[beyond_second_coil] == pytest.approx(0.5)
+    assert medium[beyond_second_coil] == pytest.approx(2.5)
+
+
+def test_bots_only_match_makes_progress() -> None:
+    game = GameState.create(
+        width=25, height=25, player_limit=3, soft_block_percentage=30
+    )
+    bots = []
+    for index, skill in enumerate(("easy", "medium", "hard")):
+        player = game.join_player(f"Bot {index}")
+        bots.append(Bot(player.id, BOT_SKILLS[skill], random.Random(index)))
+    blocks_at_start = len(game.soft_blocks)
+
+    now = 0.0
+    while now < 60:
+        for bot in bots:
+            bot.act(game, now)
+        game.tick(now)
+        now += 0.05
+
+    eliminated = sum(not player.alive for player in game.players.values())
+    assert len(game.soft_blocks) < blocks_at_start - 10 or eliminated
+
+
+def test_creator_can_add_bots_alongside_human_players() -> None:
+    manager = RoomManager()
+    room = manager.create_room(player_limit=4)
+    _, host_id, host_token, _ = manager.join_room(room.id, "Host")
+    _, _, guest_token, _ = manager.join_room(room.id, "Guest")
+
+    with pytest.raises(PermissionError, match="room creator"):
+        manager.add_bot(room.id, guest_token, "easy")
+    hard = manager.add_bot(room.id, host_token, "hard")
+    manager.add_bot(room.id, host_token, "hard")
+    with pytest.raises(GameError, match="full"):
+        manager.add_bot(room.id, host_token, "easy")
+
+    assert [room.game.players[bot_id].name for bot_id in room.bots] == [
+        "Volt (hard)",
+        "Ampere (hard)",
+    ]
+    manager.remove_bot(room.id, host_token, hard.id)
+    assert hard.id not in room.game.players
+    with pytest.raises(GameError, match="not found"):
+        manager.remove_bot(room.id, host_token, host_id)
+
+    # The freed slot (and its spawn point) can go to a human.
+    _, late_id, _, role = manager.join_room(room.id, "Late")
+    assert role == "player"
+    manager.start_room(room.id, host_id, host_token)
+    assert len(room.bots) == 1, "no extra bots when others have joined"
+    with pytest.raises(GameError, match="already started"):
+        manager.add_bot(room.id, host_token, "easy")
+    spawns = [player.position for player in room.game.players.values()]
+    assert len(set(spawns)) == len(spawns)
+
+
+def test_lone_creator_with_chosen_bots_gets_no_automatic_lineup() -> None:
+    manager = RoomManager()
+    room = manager.create_room()
+    _, host_id, host_token, _ = manager.join_room(room.id, "Host")
+    manager.add_bot(room.id, host_token, "easy")
+
+    manager.start_room(room.id, host_id, host_token)
+
+    assert [p.bot_skill for p in room.game.players.values()] == [None, "easy"]
+
+
+def test_bots_treat_cells_about_to_close_as_danger() -> None:
+    game = GameState.create(width=9, height=9, player_limit=2, soft_block_count=0)
+    bot = game.join_player("Bot")
+    game.schedule_closing(10.0)
+
+    danger = danger_map(game, 9.0, bot.id, chains=False)
+
+    assert (1, 1) in danger
+    assert 0 < danger[(1, 1)] <= 3.0
+    assert danger_map(game, 0.0, bot.id, chains=False) == {}
