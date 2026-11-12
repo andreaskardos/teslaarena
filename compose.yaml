@@ -1,0 +1,15 @@
+# Tesla Arena with Docker Compose: `docker compose up -d`.
+#
+# Open http://<host-address>:8000 afterwards. Change the left-hand port
+# if 8000 is already taken on the host.
+services:
+  teslaarena:
+    image: ghcr.io/andreaskardos/teslaarena:latest
+    container_name: teslaarena
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Behind a reverse proxy (for example teslaarena.mine.nu on port 443),
+      # set this to the proxy's IP address so rate limits see real player IPs.
+      FORWARDED_ALLOW_IPS: "127.0.0.1"

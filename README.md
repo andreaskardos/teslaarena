@@ -45,6 +45,34 @@ Open <http://127.0.0.1:8000>. Run the test suite with:
 python -m pytest
 ```
 
+## Run with Docker
+
+Every push to `develop` or `main` and every release tag runs the tests, builds
+the image for amd64 and arm64, smoke-tests it, and publishes it to
+`ghcr.io/andreaskardos/teslaarena`:
+
+| Image tag | Built from |
+|---|---|
+| `latest` | `main` |
+| `0.1` (etc.) | release tags such as `v0.1` |
+| `develop` | `develop` |
+
+To run it, use [compose.yaml](compose.yaml) (`docker compose up -d`) or:
+
+```sh
+docker run -d --name teslaarena --restart unless-stopped -p 8000:8000 ghcr.io/andreaskardos/teslaarena:latest
+```
+
+Then open `http://<host-address>:8000`. To build the image yourself, run
+`docker build -t teslaarena .` in the project folder.
+
+- The server runs as a single process on purpose: rooms and matches live in
+  memory, so they are lost when the container restarts.
+- Behind a reverse proxy (for example to serve `teslaarena.mine.nu` over
+  HTTPS), the proxy must forward WebSocket connections (`/ws/...`). Set
+  `FORWARDED_ALLOW_IPS` to the proxy's IP address so the per-IP rate limits
+  see real player addresses instead of the proxy's.
+
 For the development roadmap and steps to resume work in a new session, see
 [ROADMAP.md](ROADMAP.md). For a concise restart and project handover guide, see
 [HANDOVER.md](HANDOVER.md).
