@@ -348,6 +348,8 @@ document.querySelector("#remote-button").addEventListener("click", () => {
 
 document.querySelector("#create-form").addEventListener("submit", async (event) => {
   event.preventDefault();
+  const name = playerName();
+  if (!name) return;
   try {
     const room = await request("/api/rooms", {
       method: "POST",
@@ -357,20 +359,7 @@ document.querySelector("#create-form").addEventListener("submit", async (event) 
         soft_block_percentage: Number(softBlockPercentage.value),
       }),
     });
-    document.querySelector("#room-id").value = room.room_id;
-    await joinRoom(room.room_id, document.querySelector("#player-name").value.trim() || "Player");
-  } catch (error) {
-    status.textContent = error.message;
-  }
-});
-
-document.querySelector("#join-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  try {
-    await joinRoom(
-      document.querySelector("#room-id").value.trim(),
-      document.querySelector("#player-name").value.trim(),
-    );
+    await joinRoom(room.room_id, name);
   } catch (error) {
     status.textContent = error.message;
   }

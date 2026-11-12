@@ -50,6 +50,11 @@
 
       <main class="stage">
         <section id="lobby" class="panel">
+          <div class="name-field">
+            <label for="player-name">Your name</label>
+            <input id="player-name" placeholder="Your name" maxlength="20" required autocomplete="nickname">
+          </div>
+          <h2 class="lobby-divider">Create game</h2>
           <form id="create-form">
             <label for="arena-size">Arena size</label>
             <select id="arena-size">
@@ -72,13 +77,8 @@
             <small class="form-hint">Counted from playable tiles after spawn zones are reserved.</small>
             <button type="submit">Create room</button>
           </form>
-          <form id="join-form">
-            <input id="room-id" placeholder="Room code" maxlength="6" required>
-            <input id="player-name" placeholder="Your name" maxlength="20" required>
-            <button type="submit">Join</button>
-          </form>
-          <h2>Open rooms</h2>
-          <p class="form-hint">Enter your name, then pick a room to join or watch.</p>
+          <h2 class="lobby-divider">Open rooms</h2>
+          <p class="form-hint">Pick a room to join or watch.</p>
           <ul id="rooms"></ul>
         </section>
         <section id="game" class="in-game-only">
