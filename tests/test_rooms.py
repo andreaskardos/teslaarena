@@ -118,7 +118,11 @@ def test_timer_counts_down_the_match_then_the_closing_arena() -> None:
     assert room.timer() is None  # lobby
 
     manager.start_room(room.id, host_id, token)
-    start = room.match_started_at
+    assert room.game.closing_starts_at == room.match_started_at + 90
+    # Restart from a whole-number clock so the expected seconds are exact; the
+    # real monotonic clock can make (start + 150) - (start + 90) round to 60.0000001.
+    start = 1000.0
+    room.start_match(now=start)
     assert room.game.closing_starts_at == start + 90
 
     assert room.timer(now=start) == {"stage": "match", "seconds": 90}
