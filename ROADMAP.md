@@ -68,7 +68,7 @@
 1. Open a terminal in the repository folder:
 
    ```powershell
-   Set-Location C:\Users\Nec\repos\kronsmash
+   Set-Location C:\Users\Nec\repos\teslaarena
    ```
 
 2. Check repository state before editing:

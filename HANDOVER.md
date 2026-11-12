@@ -4,7 +4,7 @@ Updated: 2026-11-11
 
 ## Current state
 
-- Repository: `andreaskardos/kronsmash`, branch `master`.
+- Repository: `andreaskardos/teslaarena`, branch `master`.
 - Use `git --no-pager log -5 --oneline` for the latest commit.
 - The game supports listed rooms with Join/Watch buttons and match stats, arenas up to 45×45, up to 8 players, configurable crate density, Tesla coils and power-ups.
 - Each room runs one game loop (20 ticks per second) that sends state only when it changes.
@@ -19,7 +19,7 @@ Updated: 2026-11-11
 Open PowerShell and run:
 
 ```powershell
-Set-Location C:\Users\Nec\repos\kronsmash
+Set-Location C:\Users\Nec\repos\teslaarena
 git status --short
 git --no-pager log -5 --oneline
 ```
