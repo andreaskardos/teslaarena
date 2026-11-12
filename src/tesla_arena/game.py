@@ -25,11 +25,33 @@ LIGHTNING_VISUAL_SECONDS = 0.65
 # but keep the schedule, so the average speed never increases.
 MOVE_EARLY_TOLERANCE_SECONDS = 0.05
 POWERUP_DROP_CHANCE = 0.25
+# How long the arena takes to close completely once the match timer runs out.
+CLOSING_SECONDS = 60.0
+# How far ahead the snapshot warns about cells that are about to close.
+CLOSING_WARNING_SECONDS = 1.5
 BLOCK_POWERUPS = ("kick", "fire", "bomb", "speed", "remote")
 
 
 class GameError(ValueError):
     """An invalid game action or configuration."""
+
+
+def spiral_cells(left: int, top: int, right: int, bottom: int) -> list[Position]:
+    """Cells of a rectangle in a clockwise spiral from its top-left corner.
+
+    Along the top row to the right, down the right column, back along the
+    bottom row, up the left column, then the same again one ring further in.
+    """
+    cells: list[Position] = []
+    while left <= right and top <= bottom:
+        cells.extend((x, top) for x in range(left, right + 1))
+        cells.extend((right, y) for y in range(top + 1, bottom + 1))
+        if top < bottom:
+            cells.extend((x, bottom) for x in range(right - 1, left - 1, -1))
+        if left < right:
+            cells.extend((left, y) for y in range(bottom - 1, top, -1))
+        left, top, right, bottom = left + 1, top + 1, right - 1, bottom - 1
+    return cells
 
 
 @dataclass
@@ -99,6 +121,12 @@ class GameState:
     coils: dict[int, TeslaCoil] = field(default_factory=dict)
     lightning_effects: list[LightningEffect] = field(default_factory=list)
     creation_options: dict[str, object] = field(default_factory=dict, repr=False)
+    closing_starts_at: float | None = None
+    """When the arena starts closing in, or None if the match has no timer."""
+    closed_cells: set[Position] = field(default_factory=set)
+    """Cells the closing arena has turned into walls (also in ``hard_walls``)."""
+    _closing_order: list[Position] = field(default_factory=list, repr=False)
+    _last_tick_at: float = field(default=0.0, repr=False)
     _random: Random = field(default_factory=Random, repr=False)
     _next_player_id: int = 1
     _next_coil_id: int = 1
@@ -374,7 +402,70 @@ class GameState:
             raise GameError("There are no remote-controlled coils to detonate.")
         return self._explode_coils(coil_ids, now)
 
+    # Closing arena ------------------------------------------------------
+
+    def schedule_closing(self, starts_at: float) -> None:
+        """Close the arena in a spiral over ``CLOSING_SECONDS`` from ``starts_at``."""
+        self.closing_starts_at = starts_at
+        self.closed_cells = set()
+        # Only open cells, so the visible fill keeps a steady pace.
+        self._closing_order = [
+            cell
+            for cell in spiral_cells(1, 1, self.width - 2, self.height - 2)
+            if cell not in self.hard_walls
+        ]
+
+    @property
+    def closing_ends_at(self) -> float | None:
+        if self.closing_starts_at is None:
+            return None
+        return self.closing_starts_at + CLOSING_SECONDS
+
+    def _closes_at(self, index: int) -> float:
+        """When the cell at ``index`` in the closing order becomes a wall."""
+        assert self.closing_starts_at is not None
+        step = CLOSING_SECONDS / len(self._closing_order)
+        return self.closing_starts_at + (index + 1) * step
+
+    def closing_soon(self, now: float, horizon: float) -> dict[Position, float]:
+        """Seconds until each cell closes, for cells closing within ``horizon``."""
+        soon: dict[Position, float] = {}
+        if self.closing_starts_at is None:
+            return soon
+        for index in range(len(self.closed_cells), len(self._closing_order)):
+            closes_in = self._closes_at(index) - now
+            if closes_in > horizon:
+                break
+            soon[self._closing_order[index]] = max(0.0, closes_in)
+        return soon
+
+    def _advance_closing(self, now: float) -> None:
+        if self.closing_starts_at is None or now < self.closing_starts_at:
+            return
+        while len(self.closed_cells) < len(self._closing_order):
+            index = len(self.closed_cells)
+            if self._closes_at(index) > now:
+                break
+            self._close_cell(self._closing_order[index])
+
+    def _close_cell(self, cell: Position) -> None:
+        """Turn a cell into a wall, crushing whatever is on it."""
+        self.closed_cells.add(cell)
+        self.hard_walls.add(cell)
+        self.soft_blocks.discard(cell)
+        self.powerups.pop(cell, None)
+        self.coils = {
+            coil_id: coil
+            for coil_id, coil in self.coils.items()
+            if coil.position != cell
+        }
+        for player in self.players.values():
+            if player.alive and player.position == cell:
+                player.lives = 0
+
     def tick(self, now: float) -> list[int]:
+        self._last_tick_at = now
+        self._advance_closing(now)
         self.lightning_effects = [
             effect
             for effect in self.lightning_effects
@@ -471,7 +562,15 @@ class GameState:
             "soft_block_count": self.soft_block_count,
             "soft_block_percentage": self.soft_block_percentage,
             "soft_blocks_remaining": len(self.soft_blocks),
-            "hard_walls": [list(position) for position in sorted(self.hard_walls)],
+            "hard_walls": [
+                list(position)
+                for position in sorted(self.hard_walls - self.closed_cells)
+            ],
+            "closed_cells": [list(position) for position in sorted(self.closed_cells)],
+            "closing_next": [
+                list(position)
+                for position in self._closing_soon_cells()
+            ],
             "soft_blocks": [list(position) for position in sorted(self.soft_blocks)],
             "powerups": [
                 {"x": position[0], "y": position[1], "type": powerup}
@@ -519,6 +618,10 @@ class GameState:
             ],
             "winner_id": winner.id if winner else None,
         }
+
+    def _closing_soon_cells(self) -> list[Position]:
+        """Cells that close within the warning window, as of the last tick."""
+        return list(self.closing_soon(self._last_tick_at, CLOSING_WARNING_SECONDS))
 
     def _get_living_player(self, player_id: str) -> Player:
         player = self.players.get(player_id)

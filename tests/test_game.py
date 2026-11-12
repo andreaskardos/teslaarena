@@ -4,7 +4,15 @@ from random import Random
 
 import pytest
 
-from tesla_arena.game import DEFAULT_ARENA_SIZE, MAX_PLAYERS, GameError, GameState
+from tesla_arena.game import (
+    CLOSING_SECONDS,
+    CLOSING_WARNING_SECONDS,
+    DEFAULT_ARENA_SIZE,
+    MAX_PLAYERS,
+    GameError,
+    GameState,
+    spiral_cells,
+)
 
 
 def test_default_arena_has_twelve_safe_spawns_at_least_ten_tiles_apart() -> None:
@@ -483,3 +491,88 @@ def test_slightly_early_moves_are_accepted_without_raising_speed() -> None:
     game.move(player.id, 1, 0, now=10.36)
     assert player.position == (4, 1)
     assert player.next_move_at == pytest.approx(10.6)
+
+
+def test_spiral_runs_clockwise_from_the_top_left_corner() -> None:
+    assert spiral_cells(1, 1, 3, 3) == [
+        (1, 1), (2, 1), (3, 1),  # top row, to the right
+        (3, 2), (3, 3),  # right column, down
+        (2, 3), (1, 3),  # bottom row, to the left
+        (1, 2),  # left column, up
+        (2, 2),  # next ring
+    ]
+    assert len(spiral_cells(1, 1, 5, 3)) == 15
+    assert len(set(spiral_cells(1, 1, 6, 4))) == 24
+
+
+def test_closing_arena_fills_open_cells_in_spiral_order_over_a_minute() -> None:
+    game = GameState.create(width=9, height=9, player_limit=2, soft_block_count=0)
+    walls_before = set(game.hard_walls)
+    game.schedule_closing(100.0)
+    order = [
+        cell for cell in spiral_cells(1, 1, 7, 7) if cell not in walls_before
+    ]
+
+    game.tick(99.9)
+    assert not game.closed_cells
+
+    game.tick(100.0 + CLOSING_SECONDS / 2)
+    assert game.closed_cells == set(order[: len(order) // 2])
+    assert game.closed_cells <= game.hard_walls
+
+    game.tick(100.0 + CLOSING_SECONDS)
+    assert game.closed_cells == set(order)
+    assert game.closing_ends_at == 100.0 + CLOSING_SECONDS
+
+
+def test_closing_cell_knocks_out_players_and_crushes_what_is_on_it() -> None:
+    game = GameState.create(width=9, height=9, player_limit=2, soft_block_count=0)
+    first = game.join_player("First")
+    second = game.join_player("Second")
+    first.lives = 3
+    game.place_coil(first.id, now=0)
+    game.soft_blocks.add((2, 1))
+    game.powerups[(3, 1)] = "fire"
+    second.x, second.y = 5, 5  # far from the outer ring
+    game.schedule_closing(0.0)
+
+    game.tick(CLOSING_SECONDS / 10)
+
+    assert first.position == (1, 1)
+    assert not first.alive
+    assert not game.coils
+    assert (2, 1) not in game.soft_blocks
+    assert (3, 1) not in game.powerups
+    assert second.alive
+    snapshot = game.snapshot()
+    assert [1, 1] in snapshot["closed_cells"]
+    assert [1, 1] not in snapshot["hard_walls"]
+    assert snapshot["closing_next"]
+    assert snapshot["winner_id"] == second.id
+
+
+def test_players_cannot_walk_into_closed_cells() -> None:
+    game = GameState.create(width=9, height=9, player_limit=2, soft_block_count=0)
+    player = game.join_player("Mover")
+    game.join_player("Other")
+    player.x, player.y = 1, 2
+    game.schedule_closing(0.0)
+    game.tick(CLOSING_SECONDS * 2 / 40)  # (1, 1) has closed, (1, 2) has not
+
+    assert (1, 1) in game.closed_cells
+    with pytest.raises(GameError, match="blocked"):
+        game.move(player.id, 0, -1)
+
+
+def test_snapshot_warns_about_the_first_cells_before_closing_starts() -> None:
+    game = GameState.create(width=9, height=9, player_limit=2, soft_block_count=0)
+    game.schedule_closing(10.0)
+
+    game.tick(5.0)
+    assert game.snapshot()["closing_next"] == []
+
+    # On this board the first cell closes 1.5 s after the closing starts.
+    first_closes_at = 10.0 + CLOSING_SECONDS / 40
+    game.tick(first_closes_at - CLOSING_WARNING_SECONDS + 0.1)
+    assert not game.closed_cells
+    assert game.snapshot()["closing_next"][0] == [1, 1]

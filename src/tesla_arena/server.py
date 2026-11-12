@@ -30,7 +30,13 @@ from tesla_arena.game import (
     GameError,
 )
 from tesla_arena.limits import TokenBucket, WindowLimiter
-from tesla_arena.rooms import Room, RoomLimitError, RoomManager
+from tesla_arena.rooms import (
+    MAX_TIME_LIMIT_SECONDS,
+    MIN_TIME_LIMIT_SECONDS,
+    Room,
+    RoomLimitError,
+    RoomManager,
+)
 
 
 class CreateRoomRequest(BaseModel):
@@ -40,6 +46,10 @@ class CreateRoomRequest(BaseModel):
         default=DEFAULT_SOFT_BLOCK_PERCENTAGE, ge=0, le=100
     )
     soft_block_count: int | None = Field(default=None, ge=0, le=200)
+    time_limit_seconds: int | None = Field(
+        default=None, ge=MIN_TIME_LIMIT_SECONDS, le=MAX_TIME_LIMIT_SECONDS
+    )
+    """Seconds before the arena starts closing in; None for no timer."""
 
 
 class JoinRoomRequest(BaseModel):
@@ -134,6 +144,7 @@ async def create_room(
             arena_size=request.arena_size,
             player_limit=request.player_limit,
             soft_block_percentage=request.soft_block_percentage,
+            time_limit_seconds=request.time_limit_seconds,
         )
     except RoomLimitError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
@@ -373,6 +384,8 @@ def _state_message(room: Room) -> str:
             "phase": room.phase,
             # Whole seconds, so the countdown adds one update a second.
             "countdown_seconds": room.countdown_seconds(),
+            "time_limit_seconds": room.time_limit_seconds,
+            "timer": room.timer(),
             "creator_id": room.creator_id,
             "spectator_count": len(room.spectator_names),
             "spectators": list(room.spectator_names.values()),

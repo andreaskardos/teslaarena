@@ -1,6 +1,7 @@
 import pytest
 
 from tesla_arena import rooms
+from tesla_arena.game import GameError
 from tesla_arena.rooms import RoomManager
 
 
@@ -107,3 +108,52 @@ def test_match_counts_down_before_it_starts(monkeypatch: pytest.MonkeyPatch) -> 
     assert room.countdown_seconds(now=103.0) is None
     assert room.match_seconds(now=101.0) == 0
     assert room.match_seconds(now=105.0) == 2
+
+
+def test_timer_counts_down_the_match_then_the_closing_arena() -> None:
+    manager = RoomManager()
+    room = manager.create_room(time_limit_seconds=90)
+    _, host_id, token, _ = manager.join_room(room.id, "Host")
+    manager.join_room(room.id, "Guest")
+    assert room.timer() is None  # lobby
+
+    manager.start_room(room.id, host_id, token)
+    start = room.match_started_at
+    assert room.game.closing_starts_at == start + 90
+
+    assert room.timer(now=start) == {"stage": "match", "seconds": 90}
+    assert room.timer(now=start + 30.2) == {"stage": "match", "seconds": 60}
+    assert room.timer(now=start + 90) == {"stage": "closing", "seconds": 60}
+    assert room.timer(now=start + 145.5) == {"stage": "closing", "seconds": 5}
+    assert room.public_info()["time_limit_seconds"] == 90
+
+
+def test_rooms_without_a_timer_never_close() -> None:
+    manager = RoomManager()
+    room = manager.create_room()
+    _, host_id, token, _ = manager.join_room(room.id, "Host")
+    manager.join_room(room.id, "Guest")
+    manager.start_room(room.id, host_id, token)
+
+    assert room.timer() is None
+    assert room.game.closing_starts_at is None
+
+
+@pytest.mark.parametrize("seconds", [0, 9, 100 * 60])
+def test_match_timer_must_be_in_range(seconds: int) -> None:
+    with pytest.raises(GameError, match="match timer"):
+        RoomManager().create_room(time_limit_seconds=seconds)
+
+
+def test_rematch_restarts_the_match_timer() -> None:
+    manager = RoomManager()
+    room = manager.create_room(time_limit_seconds=60)
+    _, host_id, token, _ = manager.join_room(room.id, "Host")
+    _, guest_id, _, _ = manager.join_room(room.id, "Guest")
+    manager.start_room(room.id, host_id, token)
+    room.game.players[guest_id].lives = 0
+    manager.rematch(room.id, token)
+    assert room.game.closing_starts_at is None
+
+    manager.start_room(room.id, host_id, token)
+    assert room.game.closing_starts_at == room.match_started_at + 60

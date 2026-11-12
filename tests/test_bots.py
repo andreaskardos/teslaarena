@@ -155,3 +155,15 @@ def test_lone_creator_with_chosen_bots_gets_no_automatic_lineup() -> None:
     manager.start_room(room.id, host_id, host_token)
 
     assert [p.bot_skill for p in room.game.players.values()] == [None, "easy"]
+
+
+def test_bots_treat_cells_about_to_close_as_danger() -> None:
+    game = GameState.create(width=9, height=9, player_limit=2, soft_block_count=0)
+    bot = game.join_player("Bot")
+    game.schedule_closing(10.0)
+
+    danger = danger_map(game, 9.0, bot.id, chains=False)
+
+    assert (1, 1) in danger
+    assert 0 < danger[(1, 1)] <= 3.0
+    assert danger_map(game, 0.0, bot.id, chains=False) == {}

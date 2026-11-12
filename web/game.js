@@ -40,6 +40,37 @@ function formatClockTime(unixSeconds) {
   return new Date(unixSeconds * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+// "03:00": the match timer, always as minutes and seconds.
+function formatClock(totalSeconds) {
+  const seconds = Math.max(0, Math.round(totalSeconds));
+  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+// "3:00", "03:00" or "3" (minutes) to seconds; "" means no timer.
+function parseClock(text) {
+  const value = text.trim();
+  if (!value) return null;
+  const match = value.match(/^(\d{1,2})(?::([0-5]\d))?$/);
+  if (!match) throw new Error("Enter the match timer as mm:ss, for example 03:00.");
+  const seconds = Number(match[1]) * 60 + Number(match[2] ?? 0);
+  if (seconds === 0) return null;
+  if (seconds < 10) throw new Error("The match timer must be at least 00:10.");
+  return seconds;
+}
+
+function updateMatchTimer() {
+  const badge = document.querySelector("#match-timer");
+  const timer = gameState?.timer;
+  badge.classList.toggle("hidden", !timer);
+  if (!timer) return;
+  const closing = timer.stage === "closing";
+  badge.classList.toggle("closing", closing);
+  badge.classList.toggle("urgent", !closing && timer.seconds <= 10);
+  badge.textContent = closing
+    ? `⚠ Arena closing · ${formatClock(timer.seconds)}`
+    : `⏱ ${formatClock(timer.seconds)}`;
+}
+
 function describeResult(result) {
   const outcome = result.winner ? `${result.winner} won` : "Draw";
   return `${outcome} · ${result.players} players · ${formatDuration(result.duration_seconds)}`;
@@ -98,6 +129,7 @@ function roomCard(room) {
     ...(room.spectators ? [`${room.spectators} watching`] : []),
     `${room.width}×${room.height}`,
     `${room.soft_block_count} crates (${room.soft_block_percentage.toFixed(1)}%)`,
+    room.time_limit_seconds ? `⏱ ${formatClock(room.time_limit_seconds)}` : "No timer",
   ].join(" · ");
   const stats = document.createElement("small");
   stats.textContent = roomStatsLines(room).join(" · ");
@@ -315,6 +347,7 @@ function handleMessage(message) {
   document.querySelector("#room-meta").textContent =
     `${gameState.width}×${gameState.height} · ${gameState.players.length}/${gameState.player_limit} players · ${gameState.spectator_count} spectators · ${gameState.soft_block_count} crates`;
   document.querySelector("#room-stats").textContent = roomStatsLines(gameState).join(" · ");
+  updateMatchTimer();
   render();
 }
 
@@ -376,12 +409,14 @@ document.querySelector("#create-form").addEventListener("submit", async (event) 
   const name = playerName();
   if (!name) return;
   try {
+    const timeLimit = parseClock(document.querySelector("#time-limit").value);
     const room = await request("/api/rooms", {
       method: "POST",
       body: JSON.stringify({
         arena_size: Number(document.querySelector("#arena-size").value),
         player_limit: Number(document.querySelector("#player-limit").value),
         soft_block_percentage: Number(softBlockPercentage.value),
+        time_limit_seconds: timeLimit,
       }),
     });
     await joinRoom(room.room_id, name);
@@ -451,6 +486,8 @@ function render() {
   context.fillStyle = "#141d2e";
   context.fillRect(0, 0, canvas.width, canvas.height);
   drawCells(gameState.hard_walls, "#35445e", cellSize, 2);
+  drawCells(gameState.closed_cells || [], "#5b2d3c", cellSize, 1);
+  drawClosingWarning(gameState.closing_next || [], cellSize);
   drawCells(gameState.soft_blocks, "#a35c44", cellSize, 3);
   drawPowerups(gameState.powerups || [], cellSize);
   for (const coil of gameState.coils) {
@@ -644,6 +681,19 @@ function drawLightning(effects, size) {
       }
     }
     context.restore();
+  }
+}
+
+// Cells about to close flash red so players can get out of the way.
+function drawClosingWarning(cells, size) {
+  if (!cells.length) return;
+  const pulse = 0.35 + 0.35 * Math.sin(performance.now() / 70);
+  context.fillStyle = `rgba(255, 64, 88, ${pulse})`;
+  context.strokeStyle = "#ff4058";
+  context.lineWidth = 2;
+  for (const [x, y] of cells) {
+    context.fillRect(x * size, y * size, size, size);
+    context.strokeRect(x * size + 1, y * size + 1, size - 2, size - 2);
   }
 }
 

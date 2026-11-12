@@ -21,6 +21,8 @@ from tesla_arena.game import (
 )
 
 STEPS: tuple[Position, ...] = ((0, -1), (0, 1), (-1, 0), (1, 0))
+# How far ahead bots look at cells the closing arena is about to fill.
+CLOSING_DANGER_SECONDS = 3.0
 NEVER = float("inf")
 # Extra time a bot leaves itself before lightning arrives.
 SAFETY_MARGIN_SECONDS = 0.3
@@ -341,6 +343,9 @@ def danger_map(
     for coil_id, cells in blasts.items():
         for cell in cells:
             danger[cell] = min(danger.get(cell, NEVER), explode_in[coil_id])
+    # Cells the closing arena is about to wall up are as deadly as lightning.
+    for cell, closes_in in game.closing_soon(now, CLOSING_DANGER_SECONDS).items():
+        danger[cell] = min(danger.get(cell, NEVER), closes_in)
     return danger
 
 

@@ -77,6 +77,12 @@ For the development roadmap and steps to resume work in a new session, see
   arena before anyone, bots included, can move. Game actions are disabled in
   the lobby and during the countdown; anyone joining after the match starts is an observer and cannot control a
   player.
+- A room can have a match timer (mm:ss, set when the room is created; empty
+  means no timer). When it reaches 00:00 the arena closes in over one minute:
+  open cells turn into walls in a clockwise spiral from the top-left corner,
+  ring by ring towards the center. Cells flash red about 1.5 seconds before
+  they close. A player on a closing cell is out regardless of lives, and coils,
+  crates and power-ups there are crushed. Bots try to stay clear of the closing cells.
 - Before the match, the creator can add AI bots of any skill (easy, medium or
   hard) alongside human players, or remove them again. Bots take player slots.
 - A creator who starts alone without adding bots plays against Volt (easy),

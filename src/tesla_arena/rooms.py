@@ -26,6 +26,9 @@ DISCONNECT_GRACE_SECONDS = 15.0
 EMPTY_ROOM_SECONDS = 30.0
 # Seconds between the creator pressing Start and players being able to act.
 COUNTDOWN_SECONDS = 3.0
+# Allowed match timer, in seconds (the arena closes in when it runs out).
+MIN_TIME_LIMIT_SECONDS = 10
+MAX_TIME_LIMIT_SECONDS = 99 * 60 + 59
 # Caps that keep one server's memory use bounded.
 MAX_ROOMS = 200
 MAX_SPECTATORS_PER_ROOM = 50
@@ -58,6 +61,8 @@ class Room:
     id: str
     game: GameState
     creator_id: str | None = None
+    time_limit_seconds: int | None = None
+    """Match length before the arena closes in, or None for no timer."""
     started: bool = False
     created_at: float = field(default_factory=time.time)
     """Wall-clock time (Unix seconds) when the room was created."""
@@ -122,6 +127,30 @@ class Room:
         now = time.monotonic() if now is None else now
         self.match_started_at = now + COUNTDOWN_SECONDS
         self.result_recorded = False
+        if self.time_limit_seconds is not None:
+            self.game.schedule_closing(self.match_started_at + self.time_limit_seconds)
+
+    def timer(self, now: float | None = None) -> dict[str, object] | None:
+        """The match clock: time until the arena closes, then until it is full.
+
+        Whole seconds, so it changes the broadcast state once a second.
+        """
+        closing_starts_at = self.game.closing_starts_at
+        closing_ends_at = self.game.closing_ends_at
+        if closing_starts_at is None or closing_ends_at is None:
+            return None
+        if self.phase not in ("countdown", "playing"):
+            return None
+        now = time.monotonic() if now is None else now
+        if now < closing_starts_at:
+            seconds = min(
+                self.time_limit_seconds or 0, math.ceil(closing_starts_at - now)
+            )
+            return {"stage": "match", "seconds": seconds}
+        return {
+            "stage": "closing",
+            "seconds": max(0, math.ceil(closing_ends_at - now)),
+        }
 
     def countdown_seconds(self, now: float | None = None) -> int | None:
         """Whole seconds left before the match starts, or None if not counting down."""
@@ -158,6 +187,7 @@ class Room:
             "spectators": len(self.spectator_names),
             "phase": self.phase,
             "match_seconds": self.match_seconds() if self.phase == "playing" else None,
+            "time_limit_seconds": self.time_limit_seconds,
             **self.stats(),
             "width": self.game.width,
             "height": self.game.height,
@@ -177,7 +207,12 @@ class RoomManager:
         arena_size: int = DEFAULT_ARENA_SIZE,
         player_limit: int = DEFAULT_PLAYER_LIMIT,
         soft_block_percentage: float = DEFAULT_SOFT_BLOCK_PERCENTAGE,
+        time_limit_seconds: int | None = None,
     ) -> Room:
+        if time_limit_seconds is not None and not (
+            MIN_TIME_LIMIT_SECONDS <= time_limit_seconds <= MAX_TIME_LIMIT_SECONDS
+        ):
+            raise GameError("The match timer must be between 0:10 and 99:59.")
         if len(self.rooms) >= MAX_ROOMS:
             raise RoomLimitError("The server is full. Try again later.")
         room_id = secrets.token_hex(3).upper()
@@ -185,6 +220,7 @@ class RoomManager:
             room_id = secrets.token_hex(3).upper()
         room = Room(
             id=room_id,
+            time_limit_seconds=time_limit_seconds,
             game=GameState.create(
                 width=arena_size,
                 height=arena_size,

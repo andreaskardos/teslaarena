@@ -76,6 +76,10 @@
             <label for="soft-block-percentage">Crates: <output id="soft-block-value">65.0%</output></label>
             <input id="soft-block-percentage" type="range" min="0" max="100" step="0.1" value="65">
             <small class="form-hint">Counted from playable tiles after spawn zones are reserved.</small>
+            <label for="time-limit">Match timer</label>
+            <input id="time-limit" class="time-input" value="03:00" placeholder="mm:ss"
+              pattern="\d{1,2}(:[0-5]\d)?" maxlength="5" aria-describedby="time-limit-hint">
+            <small id="time-limit-hint" class="form-hint">When it reaches 00:00 the arena closes in over one minute, in a spiral from the top-left corner. Anyone caught is out. Leave empty for no timer.</small>
             <button type="submit">Create room</button>
           </form>
           <h2 class="lobby-divider">Open rooms</h2>
@@ -83,6 +87,7 @@
           <ul id="rooms"></ul>
         </section>
         <section id="game" class="in-game-only">
+          <div id="match-timer" class="match-timer hidden" role="timer" aria-live="off"></div>
           <canvas id="arena" aria-label="Arena"></canvas>
         </section>
       </main>

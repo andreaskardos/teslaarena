@@ -112,6 +112,10 @@ const Sounds = (() => {
       [523, 659, 784, 1047].forEach((freq, index) =>
         tone({ freq, duration: index === 3 ? 0.5 : 0.16, type: "square", volume: 0.12, delay: index * 0.13 }));
     },
+    alarm() {
+      [0, 0.32, 0.64].forEach((delay) =>
+        tone({ freq: 520, to: 980, duration: 0.28, type: "sawtooth", volume: 0.12, delay }));
+    },
     lose() {
       [392, 370, 349, 262].forEach((freq, index) =>
         tone({ freq, duration: index === 3 ? 0.6 : 0.22, type: "triangle", volume: 0.2, delay: index * 0.2 }));
@@ -135,6 +139,14 @@ const Sounds = (() => {
       effects.countdown();
     }
     if (previous.phase === "countdown" && next.phase === "playing") effects.go();
+
+    const timer = next.timer;
+    const oldTimer = previous.timer;
+    if (timer?.stage === "closing" && oldTimer?.stage === "match") effects.alarm();
+    else if (
+      timer?.stage === "match" && next.phase === "playing"
+      && timer.seconds <= 5 && timer.seconds !== oldTimer?.seconds
+    ) effects.countdown();
 
     const oldCoils = new Map(previous.coils.map((coil) => [coil.id, coil]));
     const ownCoilsBefore = previous.players.find((player) => player.id === memberId)?.coil_slots;
