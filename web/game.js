@@ -234,7 +234,20 @@ function returnToLobby(message) {
   delete status.dataset.reconnecting;
   status.textContent = message;
   document.body.classList.remove("in-game");
+  GameOver.hide();
   refreshRooms();
+}
+
+function showGameOver() {
+  const winner = gameState.players.find((player) => player.id === gameState.winner_id);
+  GameOver.show({
+    winner: winner?.name ?? null,
+    color: winner ? playerColor(winner) : null,
+    isYou: winner?.id === session.member_id,
+    isSpectator: session.role === "spectator",
+    seconds: gameState.match_seconds,
+    canRematch: isCreator(),
+  });
 }
 
 function handleMessage(message) {
@@ -249,6 +262,11 @@ function handleMessage(message) {
   Sounds.onState(previousState, gameState, session.member_id);
   const creator = isCreator();
   const phase = gameState.phase;
+  if (previousState && previousState.phase !== "finished" && phase === "finished") {
+    showGameOver();
+  } else if (phase !== "finished") {
+    GameOver.hide();
+  }
   if (previousPhase === "finished" && phase === "lobby") {
     status.textContent = "New round! Waiting for the host to start.";
   }
@@ -340,6 +358,11 @@ document.querySelector("#add-bot-button").addEventListener("click", () => {
 
 document.querySelector("#rematch-button").addEventListener("click", () => {
   creatorRequest(`/api/rooms/${encodeURIComponent(session.room_id)}/rematch`, { method: "POST" });
+});
+
+document.querySelector("#game-over-rematch").addEventListener("click", () => {
+  GameOver.hide();
+  document.querySelector("#rematch-button").click();
 });
 
 document.querySelector("#remote-button").addEventListener("click", () => {

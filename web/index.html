@@ -97,7 +97,22 @@
         </section>
       </aside>
     </div>
+    <dialog id="game-over" aria-labelledby="game-over-title">
+      <canvas id="fireworks" aria-hidden="true"></canvas>
+      <div id="game-over-card" class="game-over-card" tabindex="-1">
+        <div id="game-over-trophy" class="game-over-trophy" aria-hidden="true"></div>
+        <p class="eyebrow">GAME OVER</p>
+        <h2 id="game-over-title"></h2>
+        <p id="game-over-text"></p>
+        <p id="game-over-time" class="game-over-time"></p>
+        <div class="game-over-actions">
+          <button id="game-over-rematch" type="button">Play again</button>
+          <button id="game-over-close" class="secondary" type="button">Close</button>
+        </div>
+      </div>
+    </dialog>
     <script src="/sounds.js" defer></script>
+    <script src="/gameover.js" defer></script>
     <script src="/game.js" defer></script>
   </body>
 </html>
